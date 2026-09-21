@@ -1,0 +1,33 @@
+# Virtual env / secrets
+.venv/
+.env
+.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# caption-batch runtime
+.caption_state/
+**/_smoke*/.caption_state/
+logs/
+
+# Smoke state / local scratch (keep images)
+_smoke/.caption_state/
+_smoke_or/.caption_state/
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Temp
+*.tmp
+*.log
