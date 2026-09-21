@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>caption_batch — 一括キャプション</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="top">
+    <h1>caption_batch <span class="muted">一括キャプション (Gemini / OpenRouter)</span></h1>
+    <div class="hint">
+      Gradio UI は廃止。FastAPI + 静的 WebUI です。
+      · <kbd>d</kbd> デバッグ
+      · <button type="button" id="btn-diagnostics" class="ghost">診断を保存</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="card">
+      <h2>API キー（.env に保存・gitignore）</h2>
+      <div class="grid-2">
+        <div>
+          <label class="label" for="gemini-key">GEMINI_API_KEY</label>
+          <input id="gemini-key" type="password" placeholder="（未入力なら既存 .env を維持）" autocomplete="off" />
+        </div>
+        <div>
+          <label class="label" for="openrouter-key">OPENROUTER_API_KEY</label>
+          <input id="openrouter-key" type="password" placeholder="（未入力なら既存 .env を維持）" autocomplete="off" />
+        </div>
+      </div>
+      <div class="row actions">
+        <button type="button" id="btn-save-keys">キーを .env に保存</button>
+      </div>
+      <p class="warn">チャットに貼ったキーは必ずローテーションしてください。キーはリポジトリにコミットしません。</p>
+    </section>
+
+    <section class="card">
+      <h2>設定</h2>
+      <label class="label" for="provider">プロバイダ</label>
+      <select id="provider">
+        <option value="gemini" selected>gemini</option>
+        <option value="openrouter">openrouter</option>
+      </select>
+
+      <label class="label" for="model">モデル ID</label>
+      <div class="row">
+        <input id="model" type="text" placeholder="例: gemini-2.0-flash" autocomplete="off" style="flex:1" />
+        <button type="button" id="btn-list-models" class="ghost">モデル一覧</button>
+      </div>
+      <pre id="models-out" class="models" hidden></pre>
+
+      <label class="label" for="folder">画像フォルダのパス</label>
+      <input id="folder" type="text" placeholder="例: C:\datasets\my_set" autocomplete="off" />
+
+      <div class="grid-2">
+        <div>
+          <label class="label" for="workers">workers</label>
+          <input id="workers" type="number" value="4" min="1" />
+        </div>
+        <div>
+          <label class="label" for="limit">limit（空で無制限）</label>
+          <input id="limit" type="number" min="1" placeholder="例: 10" />
+        </div>
+        <div>
+          <label class="label" for="temperature">temperature</label>
+          <input id="temperature" type="number" value="0.2" step="0.1" />
+        </div>
+        <div>
+          <label class="label" for="max-tokens">max_output_tokens</label>
+          <input id="max-tokens" type="number" value="1024" min="1" />
+        </div>
+        <div>
+          <label class="label" for="max-side">max_image_side</label>
+          <input id="max-side" type="number" value="1536" min="64" />
+        </div>
+      </div>
+
+      <div class="checks">
+        <label><input type="checkbox" id="overwrite" /> overwrite（既存 .txt を上書き）</label>
+        <label><input type="checkbox" id="dry-run" /> dry-run（API を呼ばない）</label>
+        <label><input type="checkbox" id="recursive" checked /> recursive</label>
+        <label><input type="checkbox" id="from-index" /> from-index（image_index.txt を使う）</label>
+      </div>
+
+      <label class="label" for="prompt">プロンプト</label>
+      <textarea id="prompt" rows="8" placeholder="読み込み中…"></textarea>
+
+      <div class="row actions">
+        <button type="button" id="btn-start">Start</button>
+        <button type="button" id="btn-stop" class="danger">Stop</button>
+        <span id="job-pill" class="status-pill">idle</span>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="row between">
+        <h2>ジョブ状態</h2>
+        <span id="summary" class="muted small"></span>
+      </div>
+      <div id="status-detail" class="muted small">まだ実行していません。</div>
+    </section>
+
+    <section class="card debug" id="debug-panel" hidden>
+      <div class="row between">
+        <h2>デバッグログ</h2>
+        <button type="button" id="btn-refresh-logs" class="ghost">ログ更新</button>
+      </div>
+      <pre id="debug-logs" class="logs"></pre>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" hidden></div>
+  <script src="/app.js"></script>
+</body>
+</html>
