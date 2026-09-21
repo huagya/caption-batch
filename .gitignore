@@ -1,7 +1,7 @@
-# Virtual env / secrets
+# Virtual environments
 .venv/
-.env
-.env.local
+venv/
+env/
 
 # Python
 __pycache__/
@@ -11,23 +11,35 @@ __pycache__/
 .eggs/
 dist/
 build/
+*.egg
 
-# caption-batch runtime
-.caption_state/
-**/_smoke*/.caption_state/
-logs/
-
-# Smoke state / local scratch (keep images)
-_smoke/.caption_state/
-_smoke_or/.caption_state/
+# Testing / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.mypy_cache/
+.ruff_cache/
 
 # IDE / OS
 .idea/
 .vscode/
 *.swp
+*~
 .DS_Store
 Thumbs.db
 
-# Temp
-*.tmp
-*.log
+# Local / secrets
+.env
+.env.*
+!.env.example
+
+# Runtime port chosen by run_server
+.port.runtime
+
+# Session / diagnostics logs (local only)
+logs/
+diagnostics/*.zip
+
+# caption-batch runtime under datasets
+.caption_state/
