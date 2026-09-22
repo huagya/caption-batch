@@ -26,6 +26,8 @@ class CaptionRequest:
     image_prep_enabled: bool = DEFAULT_IMAGE_PREP_ENABLED
     image_format: Literal["jpeg", "webp", "png"] = DEFAULT_IMAGE_FORMAT
     image_quality: int = DEFAULT_IMAGE_QUALITY
+    thinking_level: str | None = None
+    media_resolution: str | None = None
 
 
 class Provider(ABC):
