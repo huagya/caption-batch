@@ -41,6 +41,7 @@
         <div class="row">
           <button type="button" id="btn-save-settings" class="ghost">設定を保存</button>
           <button type="button" id="btn-load-settings" class="ghost">設定を読込</button>
+          <button type="button" id="btn-load-snapshot" class="ghost" title="フォルダ内の前回ジョブ設定を読み込みます">前回の設定を読込</button>
         </div>
       </div>
       <p class="help">設定はプロジェクト直下の <code>ui-settings.json</code> に保存します（APIキーは含みません）。</p>
@@ -153,6 +154,36 @@
       </div>
       <p class="warn" id="thinking-token-tip" hidden>tip: thinking が medium/high のとき、max_output_tokens が 2048 未満だと思考トークンでキャプションが切れやすいです。2048 以上への引き上げを検討してください。</p>
 
+      <div class="grid-2">
+        <div>
+          <label class="label" for="rate-limit-rpm">レート制限 RPM（空/0＝なし）</label>
+          <input id="rate-limit-rpm" type="number" min="0" placeholder="例: 30" />
+          <p class="help" data-help-key="rate_limit_rpm">1分あたりのAPI呼び出し上限。429が多いときに使います。</p>
+        </div>
+        <div>
+          <label class="label" for="preview-count">プレビュー枚数（1–5）</label>
+          <input id="preview-count" type="number" min="1" max="5" value="3" />
+          <p class="help" data-help-key="preview">本番前に数枚だけ試します。</p>
+        </div>
+      </div>
+
+      <h3 class="subhead">Few-shot お手本（任意・最大3組）</h3>
+      <p class="help" data-help-key="few_shot">お手本の画像パスとキャプションを入れると、同じ書き方で生成しやすくなります。</p>
+      <div id="few-shot-list" class="few-shot-list">
+        <div class="few-shot-row" data-idx="0">
+          <input type="text" class="fs-image" placeholder="お手本画像のパス" autocomplete="off" />
+          <textarea class="fs-caption" rows="2" placeholder="お手本キャプション"></textarea>
+        </div>
+        <div class="few-shot-row" data-idx="1">
+          <input type="text" class="fs-image" placeholder="お手本画像のパス（任意）" autocomplete="off" />
+          <textarea class="fs-caption" rows="2" placeholder="お手本キャプション（任意）"></textarea>
+        </div>
+        <div class="few-shot-row" data-idx="2">
+          <input type="text" class="fs-image" placeholder="お手本画像のパス（任意）" autocomplete="off" />
+          <textarea class="fs-caption" rows="2" placeholder="お手本キャプション（任意）"></textarea>
+        </div>
+      </div>
+
       <div class="checks">
         <label><input type="checkbox" id="overwrite" /> overwrite（既存 .txt を上書き）</label>
         <label><input type="checkbox" id="dry-run" /> dry-run（API を呼ばない）</label>
@@ -163,8 +194,10 @@
       <label class="label" for="prompt">プロンプト</label>
       <textarea id="prompt" rows="8" placeholder="読み込み中…"></textarea>
 
+      <p class="help" data-help-key="snapshot_resume">続きから: 「前回の設定を読込」→ overwrite をOFFのまま Start。既存の .txt はスキップされます。</p>
       <div class="row actions">
         <button type="button" id="btn-start">Start</button>
+        <button type="button" id="btn-preview" class="ghost">プレビュー (3枚)</button>
         <button type="button" id="btn-stop" class="danger">Stop</button>
         <span id="job-pill" class="status-pill">idle</span>
       </div>
@@ -175,7 +208,25 @@
         <h2>ジョブ状態</h2>
         <span id="summary" class="muted small"></span>
       </div>
-      <div id="status-detail" class="muted small">まだ実行していません。</div>
+      <div class="progress-wrap" id="progress-wrap">
+        <div class="progress-bar" id="progress-bar" style="width:0%"></div>
+      </div>
+      <div id="status-meta" class="status-meta muted small">まだ実行していません。</div>
+      <p class="status-current small" id="status-current"></p>
+      <h3 class="subhead">最近の失敗</h3>
+      <ul id="error-list" class="error-list"></ul>
+      <details class="debug-json" id="status-json-wrap">
+        <summary class="muted small">デバッグ用 JSON</summary>
+        <pre id="status-detail" class="logs"></pre>
+      </details>
+    </section>
+
+    <section class="card" id="preview-card">
+      <div class="row between">
+        <h2>プレビュー結果</h2>
+        <span id="preview-summary" class="muted small"></span>
+      </div>
+      <div id="preview-results" class="preview-results muted small">プレビューを実行するとここに表示されます。</div>
     </section>
 
     <section class="card debug" id="debug-panel" hidden>
