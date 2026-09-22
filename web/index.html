@@ -128,7 +128,30 @@
           <input id="seed" type="number" step="1" placeholder="空欄" />
           <p class="help" data-help-key="seed">再現用。Gemini / OpenRouter 対応。</p>
         </div>
+        <div>
+          <label class="label" for="thinking-level">thinking / Reasoning（空＝API既定）</label>
+          <select id="thinking-level">
+            <option value="" selected>（空＝API既定）</option>
+            <option value="none">none</option>
+            <option value="minimal">minimal</option>
+            <option value="low">low</option>
+            <option value="medium">medium</option>
+            <option value="high">high</option>
+          </select>
+          <p class="help" data-help-key="thinking_level">モデルが回答前に内部で考える量。</p>
+        </div>
+        <div id="media-resolution-wrap">
+          <label class="label" for="media-resolution">media_resolution（Geminiのみ・空＝API既定）</label>
+          <select id="media-resolution">
+            <option value="" selected>（空＝API既定）</option>
+            <option value="low">low</option>
+            <option value="medium">medium</option>
+            <option value="high">high</option>
+          </select>
+          <p class="help" data-help-key="media_resolution">画像をAPI側でどの解像度相当で見るか。</p>
+        </div>
       </div>
+      <p class="warn" id="thinking-token-tip" hidden>tip: thinking が medium/high のとき、max_output_tokens が 2048 未満だと思考トークンでキャプションが切れやすいです。2048 以上への引き上げを検討してください。</p>
 
       <div class="checks">
         <label><input type="checkbox" id="overwrite" /> overwrite（既存 .txt を上書き）</label>
