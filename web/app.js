@@ -1,1 +1,1 @@
-@/workspace/caption-batch/web/app.js
+x
