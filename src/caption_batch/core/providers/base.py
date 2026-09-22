@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
@@ -11,6 +11,7 @@ from ..image_prep import (
     DEFAULT_IMAGE_QUALITY,
     DEFAULT_MAX_IMAGE_SIDE,
 )
+from ..few_shot import FewShotExample
 
 
 @dataclass
@@ -28,6 +29,7 @@ class CaptionRequest:
     image_quality: int = DEFAULT_IMAGE_QUALITY
     thinking_level: str | None = None
     media_resolution: str | None = None
+    few_shot: list[FewShotExample] = field(default_factory=list)
 
 
 class Provider(ABC):
