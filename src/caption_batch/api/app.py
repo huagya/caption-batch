@@ -24,6 +24,7 @@ from caption_batch import __version__
 from caption_batch.core.list_models import format_table, list_gemini, list_openrouter, to_json
 from caption_batch.core.prompts import DEFAULT_PROMPT
 from caption_batch.core.runner import RunStats, run_batch
+from caption_batch.core.thinking import normalize_media_resolution, normalize_thinking_level
 from caption_batch.logging_utils import configure_logging, get_logger, get_recent_logs, setup_file_logging
 from caption_batch.run_server import find_project_root, load_dotenv_files
 
@@ -83,6 +84,7 @@ def _startup() -> None:
         load_dotenv_files(root)
     except Exception as exc:  # noqa: BLE001
         log.warning("load_dotenv failed: %s", exc)
+    # After uvicorn dictConfig may have closed handlers; setup_file_logging repairs.
     try:
         setup_file_logging(root / "logs", fresh_latest=True)
     except Exception as exc:  # noqa: BLE001
@@ -111,6 +113,8 @@ class StartJobBody(BaseModel):
     image_prep_enabled: bool = DEFAULT_IMAGE_PREP_ENABLED
     image_format: Literal["jpeg", "webp", "png"] = DEFAULT_IMAGE_FORMAT
     image_quality: int = DEFAULT_IMAGE_QUALITY
+    thinking_level: Optional[str] = None
+    media_resolution: Optional[str] = None
     prompt: Optional[str] = None
     from_index: bool = False
 
@@ -148,6 +152,7 @@ def _upsert_env_file(path: Path, updates: dict[str, str]) -> None:
         if k not in existing:
             order.append(k)
             existing[k] = v
+    # Rebuild: keep comments/blank from original at top, then keys
     out: list[str] = []
     seen_keys: set[str] = set()
     if path.is_file():
@@ -174,7 +179,7 @@ def health() -> dict:
     return {"status": "ok", "version": __version__}
 
 
-UI_SETTINGS_SCHEMA = 1
+UI_SETTINGS_SCHEMA = 2
 UI_SETTINGS_KEYS = (
     "provider",
     "model",
@@ -193,8 +198,11 @@ UI_SETTINGS_KEYS = (
     "image_prep_enabled",
     "image_format",
     "image_quality",
+    "thinking_level",
+    "media_resolution",
     "prompt",
 )
+# Keys that must never be persisted in ui-settings.json
 UI_SETTINGS_FORBIDDEN = {
     "gemini_api_key",
     "openrouter_api_key",
@@ -220,8 +228,12 @@ def defaults() -> dict:
         "image_prep_enabled": DEFAULT_IMAGE_PREP_ENABLED,
         "image_format": DEFAULT_IMAGE_FORMAT,
         "image_quality": DEFAULT_IMAGE_QUALITY,
+        "thinking_level": None,
+        "media_resolution": None,
         "workers": 4,
         "providers": ["gemini", "openrouter"],
+        "thinking_levels": ["none", "minimal", "low", "medium", "high"],
+        "media_resolutions": ["low", "medium", "high"],
         "help": {
             "image_prep_enabled": "OFF=元ファイルをそのまま送信（再エンコードなし）。ON=必要なら縮小し、常に指定フォーマットへ再エンコード。拡大はしません。",
             "max_image_side": "最長辺の上限。これを超える場合のみ縮小（拡大なし）。既定 768。",
@@ -229,11 +241,13 @@ def defaults() -> dict:
             "image_quality": "1–100。webp の 100=可逆。png の 100=圧縮ほぼなし。jpeg は通常の品質。",
             "temperature": "空欄=API既定を送信しない。Gemini 3.x では空欄推奨（公式）。",
             "top_p": "空欄=API既定を送信しない。Gemini 3.x では空欄推奨。",
-            "max_output_tokens": "キャプション長の上限。空欄で省略可。既定 1024。",
+            "max_output_tokens": "キャプション長の上限。空欄で省略可。既定 1024。thinking を使う場合は思考トークンもここから消費するため、medium/high では 2048 以上を推奨。",
             "seed": "再現用シード。空欄=送信しない。Gemini / OpenRouter 対応。",
+            "thinking_level": "モデルが回答前に内部で考える量。上がるほど丁寧だが遅く・高い。思考トークンも課金され max_output_tokens を消費する。空欄＝API既定。Gemini 3.x は完全オフ不可（none≈minimal）。大量処理は low/minimal 推奨。難しいカットだけ medium/high。",
+            "media_resolution": "画像をAPI側でどの解像度相当で見るか（Geminiのみ）。空欄＝API既定。コスト削減なら低い方。OpenRouter では無視／非表示。",
         },
         "notes": {
-            "gemini_3x": "Gemini 3.x では temperature / top_p は空欄推奨（公式）",
+            "gemini_3x": "Gemini 3.x では temperature / top_p は空欄推奨（公式）。thinking の none は minimal 相当（完全オフ不可）。",
         },
     }
 
@@ -246,6 +260,7 @@ def get_ui_settings() -> dict:
     base_settings = {k: defaults_payload[k] for k in (
         "temperature", "top_p", "max_output_tokens", "seed",
         "max_image_side", "image_prep_enabled", "image_format", "image_quality",
+        "thinking_level", "media_resolution",
         "workers", "prompt",
     )}
     base_settings.update({
@@ -262,6 +277,7 @@ def get_ui_settings() -> dict:
         return {"ok": True, "exists": False, "schema": UI_SETTINGS_SCHEMA, "settings": base_settings, "path": str(path)}
     try:
         import json as _json
+        from datetime import datetime, timezone
 
         raw = _json.loads(path.read_text(encoding="utf-8"))
     except Exception as exc:  # noqa: BLE001
@@ -352,6 +368,10 @@ def _run_job(body: StartJobBody) -> None:
         JOB.apply_stats(stats)
 
     try:
+        thinking = normalize_thinking_level(body.thinking_level)
+        media = normalize_media_resolution(body.media_resolution)
+        if body.provider != "gemini":
+            media = None
         stats = run_batch(
             provider_name=body.provider,
             model=body.model.strip(),
@@ -370,6 +390,8 @@ def _run_job(body: StartJobBody) -> None:
             image_prep_enabled=body.image_prep_enabled,
             image_format=body.image_format,
             image_quality=body.image_quality,
+            thinking_level=thinking,
+            media_resolution=media,
             from_index=body.from_index,
             progress_cb=on_progress,
             stop_event=JOB.stop_event,
@@ -406,6 +428,11 @@ def job_start(body: StartJobBody) -> dict:
         raise HTTPException(status_code=400, detail="model is required")
     if body.workers < 1:
         raise HTTPException(status_code=400, detail="workers must be >= 1")
+    try:
+        normalize_thinking_level(body.thinking_level)
+        normalize_media_resolution(body.media_resolution)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     with JOB._lock:
         if JOB.running:
