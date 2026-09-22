@@ -52,7 +52,7 @@ s.max_image_side != null) maxSideEl.value = s.max_image_side;
   function escapeHtml(s) {
     return String(s == null ? "" : s)
       .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-      .replace(/"/g, """);
+      .replace(/"/g, "&#38;quot;");
   }
 
   function renderStatus(st) {
