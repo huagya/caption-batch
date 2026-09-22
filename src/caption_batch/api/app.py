@@ -26,7 +26,7 @@ log = get_logger(__name__)
 
 WEB_DIR = Path(__file__).resolve().parents[3] / "web"
 
-app = FastAPI(title="caption_batch", version="0.3.0")
+app = FastAPI(title="caption_batch", version="0.3.1")
 
 _ENV_KEY_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
 
@@ -77,8 +77,9 @@ def _startup() -> None:
         load_dotenv_files(root)
     except Exception as exc:  # noqa: BLE001
         log.warning("load_dotenv failed: %s", exc)
+    # After uvicorn dictConfig may have closed handlers; setup_file_logging repairs.
     try:
-        setup_file_logging(root / "logs")
+        setup_file_logging(root / "logs", fresh_latest=True)
     except Exception as exc:  # noqa: BLE001
         log.warning("file logging setup on startup failed: %s", exc)
 
@@ -157,7 +158,7 @@ def _upsert_env_file(path: Path, updates: dict[str, str]) -> None:
 
 @app.get("/api/health")
 def health() -> dict:
-    return {"status": "ok", "version": "0.3.0"}
+    return {"status": "ok", "version": "0.3.1"}
 
 
 @app.get("/api/defaults")
