@@ -11,7 +11,12 @@ import typer
 from tqdm import tqdm
 
 from caption_batch.core.discover import build_image_index, caption_path_for, is_done
-from caption_batch.core.image_prep import DEFAULT_MAX_IMAGE_SIDE
+from caption_batch.core.image_prep import (
+    DEFAULT_IMAGE_FORMAT,
+    DEFAULT_IMAGE_PREP_ENABLED,
+    DEFAULT_IMAGE_QUALITY,
+    DEFAULT_MAX_IMAGE_SIDE,
+)
 from caption_batch.core.list_models import format_table, list_gemini, list_openrouter, to_json
 from caption_batch.core.prompts import DEFAULT_PROMPT
 from caption_batch.core.providers import get_provider
@@ -62,15 +67,23 @@ def run_cmd(
     limit: Optional[int] = typer.Option(None, "--limit"),
     dry_run: bool = typer.Option(False, "--dry-run"),
     from_index: bool = typer.Option(False, "--from-index"),
-    temperature: Optional[float] = typer.Option(0.2, "--temperature"),
-    no_temperature: bool = typer.Option(False, "--no-temperature"),
+    temperature: Optional[float] = typer.Option(None, "--temperature", help="Omit to use API default"),
+    no_temperature: bool = typer.Option(False, "--no-temperature", help="Force omit temperature"),
+    top_p: Optional[float] = typer.Option(None, "--top-p", help="Omit to use API default"),
     max_output_tokens: Optional[int] = typer.Option(1024, "--max-output-tokens"),
     no_max_output_tokens: bool = typer.Option(False, "--no-max-output-tokens"),
+    seed: Optional[int] = typer.Option(None, "--seed", help="Omit to use API default"),
     max_image_side: int = typer.Option(DEFAULT_MAX_IMAGE_SIDE, "--max-image-side"),
+    image_prep: bool = typer.Option(DEFAULT_IMAGE_PREP_ENABLED, "--image-prep/--no-image-prep"),
+    image_format: str = typer.Option(DEFAULT_IMAGE_FORMAT, "--image-format", help="jpeg|webp|png"),
+    image_quality: int = typer.Option(DEFAULT_IMAGE_QUALITY, "--image-quality"),
 ) -> None:
     """Caption images in a folder."""
     if provider not in ("gemini", "openrouter"):
         typer.secho("provider must be gemini or openrouter", fg=typer.colors.RED, err=True)
+        raise typer.Exit(1)
+    if image_format not in ("jpeg", "webp", "png"):
+        typer.secho("image-format must be jpeg|webp|png", fg=typer.colors.RED, err=True)
         raise typer.Exit(1)
     temp, tokens = _temp_tokens(
         temperature, no_temperature, max_output_tokens, no_max_output_tokens
@@ -89,8 +102,13 @@ def run_cmd(
         limit=limit,
         dry_run=dry_run,
         temperature=temp,
+        top_p=top_p,
         max_output_tokens=tokens,
+        seed=seed,
         max_image_side=max_image_side,
+        image_prep_enabled=image_prep,
+        image_format=image_format,
+        image_quality=image_quality,
         from_index=from_index,
     )
     typer.echo(
@@ -108,14 +126,22 @@ def retry_failed_cmd(
     workers: int = typer.Option(2, "--workers"),
     prompt_file: Optional[Path] = typer.Option(None, "--prompt-file"),
     state_dir: Optional[Path] = typer.Option(None, "--state-dir"),
-    temperature: Optional[float] = typer.Option(0.2, "--temperature"),
+    temperature: Optional[float] = typer.Option(None, "--temperature"),
     no_temperature: bool = typer.Option(False, "--no-temperature"),
+    top_p: Optional[float] = typer.Option(None, "--top-p"),
     max_output_tokens: Optional[int] = typer.Option(1024, "--max-output-tokens"),
     no_max_output_tokens: bool = typer.Option(False, "--no-max-output-tokens"),
+    seed: Optional[int] = typer.Option(None, "--seed"),
     max_image_side: int = typer.Option(DEFAULT_MAX_IMAGE_SIDE, "--max-image-side"),
+    image_prep: bool = typer.Option(DEFAULT_IMAGE_PREP_ENABLED, "--image-prep/--no-image-prep"),
+    image_format: str = typer.Option(DEFAULT_IMAGE_FORMAT, "--image-format"),
+    image_quality: int = typer.Option(DEFAULT_IMAGE_QUALITY, "--image-quality"),
 ) -> None:
     """Retry images listed in errors.jsonl."""
     if provider not in ("gemini", "openrouter"):
+        raise typer.Exit(1)
+    if image_format not in ("jpeg", "webp", "png"):
+        typer.secho("image-format must be jpeg|webp|png", fg=typer.colors.RED, err=True)
         raise typer.Exit(1)
     temp, tokens = _temp_tokens(
         temperature, no_temperature, max_output_tokens, no_max_output_tokens
@@ -151,8 +177,13 @@ def retry_failed_cmd(
                     prompt=prompt_text,
                     model=model,
                     temperature=temp,
+                    top_p=top_p,
                     max_output_tokens=tokens,
+                    seed=seed,
                     max_image_side=max_image_side,
+                    image_prep_enabled=image_prep,
+                    image_format=image_format,  # type: ignore[arg-type]
+                    image_quality=image_quality,
                 )
             )
             _atomic_write_text(caption_path_for(image), text)
