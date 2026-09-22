@@ -17,7 +17,7 @@ s.max_image_side != null) maxSideEl.value = s.max_image_side;
     if (help.image_prep_enabled) {
       const block = $("#help-image-prep");
       if (block) {
-        block.innerHTML = "<strong>契約:</strong> " + help.image_prep_enabled;
+        block.innerHTML = "<strong>&#228 契約:</strong> " + help.image_prep_enabled;
       }
     }
   }
@@ -51,8 +51,8 @@ s.max_image_side != null) maxSideEl.value = s.max_image_side;
 
   function escapeHtml(s) {
     return String(s == null ? "" : s)
-      .replace(/&/g, "&").replace(/</g, "<").replace(/>/g, ">")
-      .replace(/\"/g, """);
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, """);
   }
 
   function renderStatus(st) {
