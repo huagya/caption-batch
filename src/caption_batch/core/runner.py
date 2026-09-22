@@ -20,7 +20,12 @@ from .discover import (
     iter_images,
     load_paths_from_index,
 )
-from .image_prep import DEFAULT_MAX_IMAGE_SIDE
+from .image_prep import (
+    DEFAULT_IMAGE_FORMAT,
+    DEFAULT_IMAGE_PREP_ENABLED,
+    DEFAULT_IMAGE_QUALITY,
+    DEFAULT_MAX_IMAGE_SIDE,
+)
 from .prompts import DEFAULT_PROMPT
 from .providers import get_provider
 from .providers.base import CaptionRequest
@@ -113,9 +118,14 @@ def run_batch(
     overwrite: bool = False,
     limit: int | None = None,
     dry_run: bool = False,
-    temperature: float | None = 0.2,
+    temperature: float | None = None,
+    top_p: float | None = None,
     max_output_tokens: int | None = 1024,
+    seed: int | None = None,
     max_image_side: int = DEFAULT_MAX_IMAGE_SIDE,
+    image_prep_enabled: bool = DEFAULT_IMAGE_PREP_ENABLED,
+    image_format: str = DEFAULT_IMAGE_FORMAT,
+    image_quality: int = DEFAULT_IMAGE_QUALITY,
     from_index: bool = False,
     progress_cb: Optional[Callable[[RunStats], None]] = None,
     stop_event: Optional[threading.Event] = None,
@@ -154,8 +164,9 @@ def run_batch(
     if dry_run:
         print(
             f"[dry-run] total={stats.total} skip={stats.done_skip} todo={stats.todo} "
-            f"workers={workers} temp={temperature} max_tokens={max_output_tokens} "
-            f"max_side={max_image_side}"
+            f"workers={workers} temp={temperature} top_p={top_p} max_tokens={max_output_tokens} "
+            f"seed={seed} max_side={max_image_side} prep={image_prep_enabled} "
+            f"fmt={image_format} q={image_quality}"
         )
         for p in todo[:20]:
             print(f"  would process: {p}")
@@ -181,8 +192,13 @@ def run_batch(
                     prompt=prompt_text,
                     model=model,
                     temperature=temperature,
+                    top_p=top_p,
                     max_output_tokens=max_output_tokens,
+                    seed=seed,
                     max_image_side=max_image_side,
+                    image_prep_enabled=image_prep_enabled,
+                    image_format=image_format,  # type: ignore[arg-type]
+                    image_quality=image_quality,
                 )
             )
             _atomic_write_text(out, text)
@@ -230,8 +246,13 @@ def run_batch(
         "failed": stats.failed,
         "workers": workers,
         "temperature": temperature,
+        "top_p": top_p,
         "max_output_tokens": max_output_tokens,
+        "seed": seed,
         "max_image_side": max_image_side,
+        "image_prep_enabled": image_prep_enabled,
+        "image_format": image_format,
+        "image_quality": image_quality,
         "elapsed_sec": round(elapsed, 2),
         "errors_log": str(state.errors_path),
         "stopped": stopped,
