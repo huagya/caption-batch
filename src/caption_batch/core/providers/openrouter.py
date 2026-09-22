@@ -1,19 +1,23 @@
 from __future__ import annotations
 
 import base64
+import logging
 import os
 import time
 
 from openai import OpenAI
 
+from ..few_shot import build_openrouter_user_content
 from ..image_prep import prepare_image
 from ..thinking import build_openrouter_reasoning
 from .base import CaptionRequest, Provider
 
+log = logging.getLogger(__name__)
 
-def _data_url(req: CaptionRequest) -> str:
+
+def _data_url_for(req: CaptionRequest, image_path) -> str:
     data, mime = prepare_image(
-        req.image_path,
+        image_path,
         image_prep_enabled=req.image_prep_enabled,
         max_image_side=req.max_image_side,
         image_format=req.image_format,
@@ -21,6 +25,27 @@ def _data_url(req: CaptionRequest) -> str:
     )
     b64 = base64.b64encode(data).decode("ascii")
     return f"data:{mime};base64,{b64}"
+
+
+def build_openrouter_messages(req: CaptionRequest) -> list[dict]:
+    """Build OpenRouter chat messages (prompt + optional few-shot + target). Testable."""
+    target_url = _data_url_for(req, req.image_path)
+    examples = list(req.few_shot or [])
+    if not examples:
+        content = [
+            {"type": "text", "text": req.prompt},
+            {"type": "image_url", "image_url": {"url": target_url}},
+        ]
+    else:
+        example_items = [
+            (_data_url_for(req, ex.image), ex.caption) for ex in examples
+        ]
+        content = build_openrouter_user_content(
+            prompt=req.prompt,
+            target_data_url=target_url,
+            example_items=example_items,
+        )
+    return [{"role": "user", "content": content}]
 
 
 class OpenRouterProvider(Provider):
@@ -45,22 +70,14 @@ class OpenRouterProvider(Provider):
         self.max_retries = max_retries
 
     def caption(self, req: CaptionRequest) -> str:
-        url = _data_url(req)
+        messages = build_openrouter_messages(req)
         delay = 1.0
         last_err: Exception | None = None
         for attempt in range(1, self.max_retries + 1):
             try:
                 kwargs: dict = {
                     "model": req.model,
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": [
-                                {"type": "text", "text": req.prompt},
-                                {"type": "image_url", "image_url": {"url": url}},
-                            ],
-                        }
-                    ],
+                    "messages": messages,
                 }
                 if req.temperature is not None:
                     kwargs["temperature"] = float(req.temperature)
@@ -84,9 +101,26 @@ class OpenRouterProvider(Provider):
             except Exception as e:
                 last_err = e
                 msg = str(e).lower()
-                retryable = any(x in msg for x in ("429", "rate", "503", "unavailable", "timeout", "500"))
+                rate_limited = ("429" in msg) or ("rate" in msg and "limit" in msg) or ("resource_exhausted" in msg)
+                retryable = rate_limited or any(
+                    x in msg for x in ("503", "unavailable", "timeout", "500")
+                )
                 if not retryable or attempt == self.max_retries:
                     raise
+                if rate_limited:
+                    log.warning(
+                        "rate_limited retry attempt=%s sleep=%s provider=openrouter err=%s",
+                        attempt,
+                        delay,
+                        e,
+                    )
+                else:
+                    log.warning(
+                        "retryable error attempt=%s sleep=%s provider=openrouter err=%s",
+                        attempt,
+                        delay,
+                        e,
+                    )
                 time.sleep(delay)
                 delay = min(delay * 2, 60)
         raise RuntimeError(f"OpenRouter failed after retries: {last_err}")
