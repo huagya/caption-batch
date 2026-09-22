@@ -276,3 +276,95 @@ code {
   font-family: var(--mono);
   font-size: 0.85em;
 }
+
+/* --- 0.6.0 progress / preview / few-shot --- */
+.progress-wrap {
+  margin: 0.6rem 0 0.4rem;
+  height: 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.progress-bar {
+  height: 100%;
+  background: var(--accent);
+  width: 0%;
+  transition: width 0.25s ease;
+}
+.status-meta { margin: 0.25rem 0; line-height: 1.45; }
+.status-current {
+  margin: 0.35rem 0 0.5rem;
+  font-family: var(--mono);
+  word-break: break-all;
+  color: var(--text);
+}
+.error-list {
+  margin: 0.25rem 0 0.75rem;
+  padding-left: 1.2rem;
+  max-height: 160px;
+  overflow: auto;
+  font-size: 0.85rem;
+}
+.error-list li {
+  margin: 0.2rem 0;
+  color: var(--fail);
+  word-break: break-all;
+}
+.error-list .err-path { font-family: var(--mono); color: var(--muted); }
+.debug-json { margin-top: 0.5rem; }
+.debug-json summary { cursor: pointer; }
+.few-shot-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin: 0.4rem 0 0.75rem;
+}
+.few-shot-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.35rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+.few-shot-row .fs-image,
+.few-shot-row .fs-caption {
+  width: 100%;
+  padding: 0.45rem 0.65rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  font-size: 0.9rem;
+  font-family: var(--font);
+}
+.few-shot-row .fs-caption { font-family: var(--mono); resize: vertical; }
+.preview-results {
+  max-height: 360px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+.preview-item {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.55rem 0.7rem;
+  background: var(--bg);
+}
+.preview-item .pv-path {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  color: var(--muted);
+  word-break: break-all;
+}
+.preview-item .pv-caption {
+  margin: 0.35rem 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.9rem;
+}
+.preview-item.skipped { opacity: 0.75; }
+.preview-item.error { border-color: var(--fail); }
