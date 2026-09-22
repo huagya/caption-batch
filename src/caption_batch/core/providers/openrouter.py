@@ -6,12 +6,18 @@ import time
 
 from openai import OpenAI
 
-from ..image_prep import prepare_image_jpeg
+from ..image_prep import prepare_image
 from .base import CaptionRequest, Provider
 
 
-def _data_url(path, max_image_side: int) -> str:
-    data, mime = prepare_image_jpeg(path, max_image_side=max_image_side)
+def _data_url(req: CaptionRequest) -> str:
+    data, mime = prepare_image(
+        req.image_path,
+        image_prep_enabled=req.image_prep_enabled,
+        max_image_side=req.max_image_side,
+        image_format=req.image_format,
+        image_quality=req.image_quality,
+    )
     b64 = base64.b64encode(data).decode("ascii")
     return f"data:{mime};base64,{b64}"
 
@@ -24,9 +30,7 @@ class OpenRouterProvider(Provider):
         if not key:
             raise SystemExit("OPENROUTER_API_KEY is not set.")
         headers = {}
-        ref = os.environ.get(
-            "OPENROUTER_HTTP_REFERER", "https://github.com/huagya/caption-batch"
-        )
+        ref = os.environ.get("OPENROUTER_HTTP_REFERER", "https://github.com/huagya/caption-batch")
         title = os.environ.get("OPENROUTER_APP_TITLE", "caption-batch")
         if ref:
             headers["HTTP-Referer"] = ref
@@ -40,7 +44,7 @@ class OpenRouterProvider(Provider):
         self.max_retries = max_retries
 
     def caption(self, req: CaptionRequest) -> str:
-        url = _data_url(req.image_path, req.max_image_side)
+        url = _data_url(req)
         delay = 1.0
         last_err: Exception | None = None
         for attempt in range(1, self.max_retries + 1):
@@ -59,8 +63,12 @@ class OpenRouterProvider(Provider):
                 }
                 if req.temperature is not None:
                     kwargs["temperature"] = float(req.temperature)
+                if req.top_p is not None:
+                    kwargs["top_p"] = float(req.top_p)
                 if req.max_output_tokens is not None:
                     kwargs["max_tokens"] = int(req.max_output_tokens)
+                if req.seed is not None:
+                    kwargs["seed"] = int(req.seed)
                 response = self.client.chat.completions.create(**kwargs)
                 text = (response.choices[0].message.content or "").strip()
                 if not text:
@@ -69,9 +77,7 @@ class OpenRouterProvider(Provider):
             except Exception as e:
                 last_err = e
                 msg = str(e).lower()
-                retryable = any(
-                    x in msg for x in ("429", "rate", "503", "unavailable", "timeout", "500")
-                )
+                retryable = any(x in msg for x in ("429", "rate", "503", "unavailable", "timeout", "500"))
                 if not retryable or attempt == self.max_retries:
                     raise
                 time.sleep(delay)
