@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import time
 
@@ -9,6 +10,8 @@ from google.genai import types
 from ..image_prep import prepare_image
 from ..thinking import build_gemini_media_resolution, build_gemini_thinking_config
 from .base import CaptionRequest, Provider
+
+log = logging.getLogger(__name__)
 
 
 def _caption_text_from_response(response: object) -> str:
@@ -33,6 +36,33 @@ def _caption_text_from_response(response: object) -> str:
     return " ".join(text.split()) if text else ""
 
 
+def _prep(req: CaptionRequest, image_path):
+    return prepare_image(
+        image_path,
+        image_prep_enabled=req.image_prep_enabled,
+        max_image_side=req.max_image_side,
+        image_format=req.image_format,
+        image_quality=req.image_quality,
+    )
+
+
+def build_gemini_contents(req: CaptionRequest) -> list:
+    """Build Gemini Content list (prompt + optional few-shot + target). Testable helper."""
+    parts: list = [types.Part.from_text(text=req.prompt)]
+    examples = list(req.few_shot or [])
+    for i, ex in enumerate(examples, start=1):
+        label = "Example caption:" if len(examples) == 1 else f"Example {i} caption:"
+        ex_data, ex_mime = _prep(req, ex.image)
+        parts.append(types.Part.from_text(text=label))
+        parts.append(types.Part.from_bytes(data=ex_data, mime_type=ex_mime))
+        parts.append(types.Part.from_text(text=ex.caption))
+    if examples:
+        parts.append(types.Part.from_text(text="Now caption this image:"))
+    data, mime = _prep(req, req.image_path)
+    parts.append(types.Part.from_bytes(data=data, mime_type=mime))
+    return [types.Content(role="user", parts=parts)]
+
+
 class GeminiProvider(Provider):
     name = "gemini"
 
@@ -44,13 +74,6 @@ class GeminiProvider(Provider):
         self.max_retries = max_retries
 
     def caption(self, req: CaptionRequest) -> str:
-        data, mime = prepare_image(
-            req.image_path,
-            image_prep_enabled=req.image_prep_enabled,
-            max_image_side=req.max_image_side,
-            image_format=req.image_format,
-            image_quality=req.image_quality,
-        )
         config_kwargs: dict = {}
         if req.temperature is not None:
             config_kwargs["temperature"] = float(req.temperature)
@@ -70,6 +93,7 @@ class GeminiProvider(Provider):
             config_kwargs["media_resolution"] = media_res
 
         config = types.GenerateContentConfig(**config_kwargs) if config_kwargs else None
+        contents = build_gemini_contents(req)
 
         delay = 1.0
         last_err: Exception | None = None
@@ -77,15 +101,7 @@ class GeminiProvider(Provider):
             try:
                 kwargs: dict = {
                     "model": req.model,
-                    "contents": [
-                        types.Content(
-                            role="user",
-                            parts=[
-                                types.Part.from_text(text=req.prompt),
-                                types.Part.from_bytes(data=data, mime_type=mime),
-                            ],
-                        )
-                    ],
+                    "contents": contents,
                 }
                 if config is not None:
                     kwargs["config"] = config
@@ -97,9 +113,26 @@ class GeminiProvider(Provider):
             except Exception as e:
                 last_err = e
                 msg = str(e).lower()
-                retryable = any(x in msg for x in ("429", "rate", "503", "unavailable", "timeout", "500"))
+                rate_limited = ("429" in msg) or ("rate" in msg and "limit" in msg) or ("resource_exhausted" in msg)
+                retryable = rate_limited or any(
+                    x in msg for x in ("503", "unavailable", "timeout", "500")
+                )
                 if not retryable or attempt == self.max_retries:
                     raise
+                if rate_limited:
+                    log.warning(
+                        "rate_limited retry attempt=%s sleep=%s provider=gemini err=%s",
+                        attempt,
+                        delay,
+                        e,
+                    )
+                else:
+                    log.warning(
+                        "retryable error attempt=%s sleep=%s provider=gemini err=%s",
+                        attempt,
+                        delay,
+                        e,
+                    )
                 time.sleep(delay)
                 delay = min(delay * 2, 60)
         raise RuntimeError(f"Gemini failed after retries: {last_err}")
