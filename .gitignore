@@ -43,3 +43,8 @@ diagnostics/*.zip
 
 # caption-batch runtime under datasets
 .caption_state/
+**/_smoke*/.caption_state/
+*.tmp
+
+# Durable WebUI settings (no secrets; local only)
+ui-settings.json
