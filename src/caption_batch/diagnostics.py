@@ -12,7 +12,12 @@ from pathlib import Path
 from typing import Any
 
 from caption_batch import __version__
-from caption_batch.logging_utils import flush_logging, get_logger, setup_file_logging
+from caption_batch.logging_utils import (
+    flush_logging,
+    get_logger,
+    get_recent_logs,
+    setup_file_logging,
+)
 from caption_batch.run_server import find_project_root
 
 log = get_logger(__name__)
@@ -51,6 +56,11 @@ def collect_diagnostics(root: Path | None = None) -> dict[str, Any]:
         port = root / "port.json"
         if port.is_file():
             zf.write(port, "port.json")
+        try:
+            ring = get_recent_logs(limit=200)
+            zf.writestr("logs/ring-buffer.json", json.dumps(ring, indent=2))
+        except Exception:
+            zf.writestr("logs/ring-buffer.json", "[]")
         logs = root / "logs"
         if logs.is_dir():
             for name in ("latest.log", "selfcheck-last.txt"):

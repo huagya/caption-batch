@@ -12,7 +12,7 @@ from typing import Any
 
 import uvicorn
 
-from caption_batch.logging_utils import get_logger, setup_file_logging
+from caption_batch.logging_utils import configure_logging, get_logger
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8771
@@ -137,7 +137,9 @@ def _open_browser_later(url: str, delay_sec: float = 1.5) -> None:
 def main() -> None:
     root = find_project_root()
     load_dotenv_files(root)
-    setup_file_logging(root / "logs")
+    # Only stderr/ring before uvicorn: dictConfig closes file handlers.
+    # DualFileHandler is created in FastAPI startup after uvicorn configures logging.
+    configure_logging()
     log = get_logger(__name__)
     log.info("run_server starting root=%s", root)
     host, preferred = load_port_config(root)
