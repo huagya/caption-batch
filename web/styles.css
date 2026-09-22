@@ -241,3 +241,38 @@ pre.models {
   white-space: pre-wrap;
   word-break: break-all;
 }
+
+.subhead {
+  margin: 1.1rem 0 0.4rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text);
+}
+.help {
+  margin: 0.25rem 0 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+.help-block {
+  margin: 0.4rem 0 0.6rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  font-size: 0.85rem;
+  color: var(--muted);
+  line-height: 1.45;
+}
+.note {
+  margin: 0.35rem 0 0.5rem;
+  padding: 0.45rem 0.65rem;
+  border-left: 3px solid var(--warn);
+  background: rgba(230, 192, 123, 0.08);
+  color: var(--warn);
+  font-size: 0.85rem;
+}
+code {
+  font-family: var(--mono);
+  font-size: 0.85em;
+}
