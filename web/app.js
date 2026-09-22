@@ -1,1 +1,6 @@
-/workspace/caption-batch/web/app.js
+(() => {
+  const $ = (sel) => document.querySelector(sel);
+  const providerEl = $("#provider");
+  function jobBody() { return {}; }
+  window.__cb_test = true;
+})();
