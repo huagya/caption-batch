@@ -10,6 +10,10 @@
   const topPEl = $("#top-p");
   const maxTokensEl = $("#max-tokens");
   const seedEl = $("#seed");
+  const thinkingLevelEl = $("#thinking-level");
+  const mediaResolutionEl = $("#media-resolution");
+  const mediaResolutionWrap = $("#media-resolution-wrap");
+  const thinkingTokenTip = $("#thinking-token-tip");
   const maxSideEl = $("#max-side");
   const imagePrepEl = $("#image-prep");
   const imageFormatEl = $("#image-format");
@@ -85,6 +89,8 @@
       top_p: parseOptionalFloat(topPEl),
       max_output_tokens: parseOptionalInt(maxTokensEl),
       seed: parseOptionalInt(seedEl),
+      thinking_level: (thinkingLevelEl.value || "").trim() || null,
+      media_resolution: (mediaResolutionEl.value || "").trim() || null,
       max_image_side: parseInt(maxSideEl.value, 10) || 768,
       image_prep_enabled: !!imagePrepEl.checked,
       image_format: imageFormatEl.value || "webp",
@@ -97,6 +103,7 @@
 
   function collectSettings() {
     const body = jobBody();
+    // limit already optional; keep empty as null for persistence clarity
     if (!limitEl.value.trim()) body.limit = null;
     return body;
   }
@@ -124,6 +131,16 @@
     setOptionalNumber(topPEl, s.top_p);
     setOptionalNumber(maxTokensEl, s.max_output_tokens != null ? s.max_output_tokens : (dflt && dflt.max_output_tokens));
     setOptionalNumber(seedEl, s.seed);
+    if (s.thinking_level != null && s.thinking_level !== "") {
+      thinkingLevelEl.value = s.thinking_level;
+    } else if (s.thinking_level === null || s.thinking_level === "") {
+      thinkingLevelEl.value = "";
+    }
+    if (s.media_resolution != null && s.media_resolution !== "") {
+      mediaResolutionEl.value = s.media_resolution;
+    } else if (s.media_resolution === null || s.media_resolution === "") {
+      mediaResolutionEl.value = "";
+    }
     if (s.max_image_side != null) maxSideEl.value = s.max_image_side;
     if (s.image_prep_enabled != null) imagePrepEl.checked = !!s.image_prep_enabled;
     if (s.image_format) imageFormatEl.value = s.image_format;
@@ -164,6 +181,7 @@
         pollTimer = null;
       }
     } catch (e) {
+      /* ignore poll errors */
     }
   }
 
@@ -171,6 +189,37 @@
     if (pollTimer) clearInterval(pollTimer);
     pollTimer = setInterval(refreshStatus, 1000);
   }
+
+
+  function updateMediaResolutionVisibility() {
+    const isGemini = providerEl.value === "gemini";
+    if (mediaResolutionWrap) {
+      mediaResolutionWrap.style.opacity = isGemini ? "1" : "0.45";
+    }
+    if (mediaResolutionEl) {
+      mediaResolutionEl.disabled = !isGemini;
+      if (!isGemini) {
+        /* keep value in form for settings persistence; jobBody still sends it
+           but API strips for non-gemini */
+      }
+    }
+  }
+
+  function updateThinkingTokenTip() {
+    if (!thinkingTokenTip) return;
+    const level = (thinkingLevelEl.value || "").trim();
+    const tokens = parseOptionalInt(maxTokensEl);
+    const highThink = level === "medium" || level === "high";
+    const lowTokens = tokens !== null && tokens < 2048;
+    thinkingTokenTip.hidden = !(highThink && lowTokens);
+  }
+
+  providerEl.addEventListener("change", () => {
+    updateMediaResolutionVisibility();
+  });
+  thinkingLevelEl.addEventListener("change", updateThinkingTokenTip);
+  maxTokensEl.addEventListener("input", updateThinkingTokenTip);
+  maxTokensEl.addEventListener("change", updateThinkingTokenTip);
 
   $("#btn-save-keys").addEventListener("click", async () => {
     try {
@@ -250,7 +299,7 @@
       });
       try {
         localStorage.setItem("caption-batch-ui-settings", JSON.stringify(settings));
-      } catch (_) { }
+      } catch (_) { /* optional bonus */ }
       toast("設定を保存しました");
     } catch (e) {
       toast(String(e.message || e), true);
@@ -268,6 +317,7 @@
   });
 
   $("#btn-llm-recommend").addEventListener("click", () => {
+    // Caption-oriented presets for older models; Gemini 3.x should stay empty.
     temperatureEl.value = "0.2";
     topPEl.value = "0.95";
     if (!maxTokensEl.value.trim()) maxTokensEl.value = "1024";
@@ -289,26 +339,36 @@
         const note = $("#note-gemini3");
         if (note) note.textContent = d.notes.gemini_3x;
       }
+      // Apply defaults first
       if (d.prompt) promptEl.value = d.prompt;
       setOptionalNumber(temperatureEl, d.temperature);
       setOptionalNumber(topPEl, d.top_p);
       setOptionalNumber(maxTokensEl, d.max_output_tokens);
       setOptionalNumber(seedEl, d.seed);
+      if (d.thinking_level) thinkingLevelEl.value = d.thinking_level;
+      else thinkingLevelEl.value = "";
+      if (d.media_resolution) mediaResolutionEl.value = d.media_resolution;
+      else mediaResolutionEl.value = "";
       if (d.max_image_side != null) maxSideEl.value = d.max_image_side;
       if (d.image_prep_enabled != null) imagePrepEl.checked = !!d.image_prep_enabled;
       if (d.image_format) imageFormatEl.value = d.image_format;
       if (d.image_quality != null) imageQualityEl.value = d.image_quality;
       if (d.workers != null) workersEl.value = d.workers;
 
+      // Then merge durable ui-settings if present
       try {
         const saved = await api("/ui-settings");
         if (saved && saved.exists && saved.settings) {
           applySettings(saved.settings, d);
         }
-      } catch (_) { }
+      } catch (_) { /* ignore */ }
+      updateMediaResolutionVisibility();
+      updateThinkingTokenTip();
     } catch (e) {
       promptEl.placeholder = "defaults load failed";
     }
+    updateMediaResolutionVisibility();
+    updateThinkingTokenTip();
     refreshStatus();
   })();
 })();
