@@ -1,0 +1,185 @@
+s.max_image_side != null) maxSideEl.value = s.max_image_side;
+    if (s.image_prep_enabled != null) imagePrepEl.checked = !!s.image_prep_enabled;
+    if (s.image_format) imageFormatEl.value = s.image_format;
+    if (s.image_quality != null) imageQualityEl.value = s.image_quality;
+    if (s.prompt != null) promptEl.value = s.prompt;
+    if (s.rate_limit_rpm != null) setOptionalNumber(rateLimitRpmEl, s.rate_limit_rpm || "");
+    if (s.preview_count != null && previewCountEl) previewCountEl.value = s.preview_count;
+    if (s.few_shot != null) applyFewShot(s.few_shot);
+  }
+
+  function applyHelp(help) {
+    if (!help) return;
+    document.querySelectorAll("[data-help-key]").forEach((el) => {
+      const key = el.getAttribute("data-help-key");
+      if (help[key]) el.textContent = help[key];
+    });
+    if (help.image_prep_enabled) {
+      const block = $("#help-image-prep");
+      if (block) {
+        block.innerHTML = "<strong>契約:</strong> " + help.image_prep_enabled;
+      }
+    }
+  }
+
+  function formatEta(sec) {
+    if (sec == null || !Number.isFinite(sec)) return "—";
+    const s = Math.max(0, Math.round(sec));
+    if (s < 60) return s + "秒";
+    const m = Math.floor(s / 60);
+    const r = s % 60;
+    if (m < 60) return m + "分" + r + "秒";
+    const h = Math.floor(m / 60);
+    return h + "時間" + (m % 60) + "分";
+  }
+
+  function renderPreviewResults(results) {
+    if (!previewResultsEl) return;
+    if (!results || !results.length) {
+      previewResultsEl.innerHTML = "<span class=\"muted\">結果なし</span>";
+      return;
+    }
+    previewResultsEl.innerHTML = results.map((r) => {
+      const cls = r.error ? "preview-item error" : (r.skipped ? "preview-item skipped" : "preview-item");
+      const flag = r.skipped ? "（スキップ・既存）" : (r.error ? "（エラー）" : "");
+      const body = r.error
+        ? ("<p class=\"pv-caption\">" + escapeHtml(r.error) + "</p>")
+        : ("<p class=\"pv-caption\">" + escapeHtml(r.caption || "(空)") + "</p>");
+      return "<div class=\"" + cls + "\"><div class=\"pv-path\">" + escapeHtml(r.image || "") + " " + flag + "</div>" + body + "</div>";
+    }).join("");
+  }
+
+  function escapeHtml(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&").replace(/</g, "<").replace(/>/g, ">")
+      .replace(/\"/g, """);
+  }
+
+  function renderStatus(st) {
+    if (!st) return;
+    const running = !!st.running;
+    const kind = st.kind || "batch";
+    jobPill.textContent = running
+      ? (kind === "preview" ? "preview" : "running")
+      : (st.error ? "error" : (st.stopped ? "stopped" : "idle"));
+    jobPill.className = "status-pill " + (running ? "running" : (st.error ? "fail" : "ok"));
+
+    const ok = st.ok || 0;
+    const fail = st.fail || 0;
+    const skip = st.skip || 0;
+    const todo = st.todo || 0;
+    const total = st.total || 0;
+    const done = ok + fail;
+    const denom = todo > 0 ? todo : (total > 0 ? total : 0);
+    const pct = denom > 0 ? Math.min(100, Math.round((done / denom) * 100)) : (running ? 0 : 100);
+    if (progressBarEl) progressBarEl.style.width = pct + "%";
+
+    summaryEl.textContent =
+      `ok=${ok} fail=${fail} skip=${skip} todo=${todo} total=${total}`;
+
+    const rate = st.rate_per_sec;
+    const rateTxt = (rate != null && Number.isFinite(rate)) ? (rate.toFixed(2) + " 枚/秒") : "—";
+    const etaTxt = formatEta(st.eta_sec);
+    if (statusMetaEl) {
+      statusMetaEl.textContent =
+        `進捗 ${done}/${denom || "—"} (${pct}%) · ETA ${etaTxt} · 速度 ${rateTxt}` +
+        (st.error ? (" · エラー: " + st.error) : "");
+    }
+    if (statusCurrentEl) {
+      statusCurrentEl.textContent = st.current_image
+        ? ("処理中: " + st.current_image)
+        : (running ? "処理中…" : "");
+    }
+    if (errorListEl) {
+      const errs = st.recent_errors || [];
+      if (!errs.length) {
+        errorListEl.innerHTML = "<li class=\"muted\">なし</li>";
+      } else {
+        errorListEl.innerHTML = errs.slice(-20).reverse().map((e) => {
+          const msg = (e.error || "").slice(0, 120);
+          return "<li><span class=\"err-path\">" + escapeHtml(e.image || "") + "</span> — " + escapeHtml(msg) + "</li>";
+        }).join("");
+      }
+    }
+    if (statusDetail) statusDetail.textContent = JSON.stringify(st, null, 2);
+
+    if (kind === "preview" && Array.isArray(st.results)) {
+      renderPreviewResults(st.results);
+      if (previewSummaryEl) {
+        previewSummaryEl.textContent = running
+          ? "プレビュー実行中…"
+          : `完了 ok=${ok} fail=${fail} skip=${skip}`;
+      }
+      if (!running && !st.error) {
+        /* toast once when preview finishes is handled by polling edge */
+      }
+    }
+  }
+
+  let wasRunning = false;
+  let lastKind = null;
+
+  async function refreshStatus() {
+    try {
+      const st = await api("/job/status");
+      const nowRunning = !!st.running;
+      if (wasRunning && !nowRunning && (st.kind === "preview" || lastKind === "preview")) {
+        if (st.error) toast("プレビュー失敗: " + st.error, true);
+        else toast("プレビュー完了");
+      }
+      wasRunning = nowRunning;
+      lastKind = st.kind || lastKind;
+      renderStatus(st);
+      if (!st.running && pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+    } catch (e) {
+      /* ignore poll errors */
+    }
+  }
+
+  function startPolling() {
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = setInterval(refreshStatus, 1000);
+  }
+
+
+  function updateMediaResolutionVisibility() {
+    const isGemini = providerEl.value === "gemini";
+    if (mediaResolutionWrap) {
+      mediaResolutionWrap.style.opacity = isGemini ? "1" : "0.45";
+    }
+    if (mediaResolutionEl) {
+      mediaResolutionEl.disabled = !isGemini;
+      if (!isGemini) {
+        /* keep value in form for settings persistence; jobBody still sends it
+           but API strips for non-gemini */
+      }
+    }
+  }
+
+  function updateThinkingTokenTip() {
+    if (!thinkingTokenTip) return;
+    const level = (thinkingLevelEl.value || "").trim();
+    const tokens = parseOptionalInt(maxTokensEl);
+    const highThink = level === "medium" || level === "high";
+    const lowTokens = tokens !== null && tokens < 2048;
+    thinkingTokenTip.hidden = !(highThink && lowTokens);
+  }
+
+  providerEl.addEventListener("change", () => {
+    updateMediaResolutionVisibility();
+  });
+  thinkingLevelEl.addEventListener("change", updateThinkingTokenTip);
+  maxTokensEl.addEventListener("input", updateThinkingTokenTip);
+  maxTokensEl.addEventListener("change", updateThinkingTokenTip);
+
+  $("#btn-save-keys").addEventListener("click", async () => {
+    try {
+      const body = {};
+      if (geminiKeyEl.value.trim()) body.gemini_api_key = geminiKeyEl.value.trim();
+      if (openrouterKeyEl.value.trim()) body.openrouter_api_key = openrouterKeyEl.value.trim();
+      const r = await api("/save-keys", { method: "POST", body: JSON.stringify(body) });
+      toast("Saved: " + (r.updated || []).join(", "));
+      geminiKeyEl.value = "";
