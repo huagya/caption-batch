@@ -102,10 +102,36 @@ presence_penalty / frequency_penalty / top_k は未対応です。
 WebUI の「設定を保存」「設定を読込」はプロジェクト直下の `ui-settings.json` に永続化します（API キーは含めません。キーは `.env`）。
 
 ```json
-{ "schema": 2, "updated_at": "…", "settings": { … } }
+{ "schema": 3, "updated_at": "…", "settings": { … } }
 ```
 
-`ui-settings.json` は `.gitignore` 済みです。スキーマが未知／新しい場合も既知キーだけマージし、欠けたキーは `/api/defaults` の値で補います（schema 2 で `thinking_level` / `media_resolution` を追加）。
+`ui-settings.json` は `.gitignore` 済みです。スキーマが未知／新しい場合も既知キーだけマージし、欠けたキーは `/api/defaults` の値で補います（schema 3 で `thinking_level` / `media_resolution` を追加）。
+
+
+## 0.6.0 の新機能
+
+### プレビュー（数枚だけ試す）
+WebUI の **「プレビュー (N枚)」** で、本番と同じ設定で 1〜5 枚だけキャプションします。結果は画面のプレビュー欄に出ます（既定では `.txt` も書きます）。
+
+### 進捗表示
+ジョブ実行中に、進捗バー・ETA・速度・いま処理中のファイル・直近の失敗一覧を表示します。
+
+### レート制限
+**レート制限 RPM** で「1分あたり何回まで API を呼ぶか」を制限できます。空欄または 0 でオフ（従来どおり）。429 が多いときは 20〜60 を試してください。429 時はログに `rate_limited retry attempt=N sleep=S` と出ます。
+
+### 前回の設定 / 続きから
+フォルダ内の `.caption_state/job_snapshot.json` に、最後のジョブ設定が保存されます。
+1. フォルダパスを入れる  
+2. **「前回の設定を読込」**  
+3. 上書き（overwrite）は OFF のまま **Start**  
+→ 既にある `.txt` はスキップして続きから進みます。
+
+### Few-shot お手本
+お手本の画像パス＋キャプションを最大 3 組入れられます。モデルに「こんな書き方で」と示します。空欄なら従来どおりです。
+
+### まだないもの（次の予定）
+- 複数 PC での分割処理（sharding）
+- 二パス AI 自己レビュー（コスト・汚染リスクのため見送り継続）
 
 ## CLI
 
@@ -117,6 +143,8 @@ caption-batch run --provider gemini --model gemini-3.5-flash-lite --input-dir D:
 caption-batch list-models --provider openrouter
 caption-batch build-index --input-dir D:\dataset
 caption-batch retry-failed --provider gemini --model gemini-3.5-flash-lite --input-dir D:\dataset --errors D:\dataset\.caption_state\errors.jsonl
+caption-batch run --provider gemini --model gemini-2.0-flash --input-dir D:\dataset --rate-limit-rpm 30
+caption-batch run --provider gemini --model gemini-2.0-flash --input-dir D:\dataset --few-shot examples.json --preview-count 3
 caption-batch selfcheck
 caption-batch serve
 ```
