@@ -53,26 +53,59 @@
 |------------|---------|--------|------------|------|
 | temperature | 空 | ○（省略可） | ○ | Gemini 3.x は空欄推奨（公式） |
 | top_p | 空 | ○ | ○ | 同上 |
-| max_output_tokens | 1024 | ○ (`max_output_tokens`) | ○ (`max_tokens`) | キャプション長の安全弁 |
+| max_output_tokens | 1024 | ○ (`max_output_tokens`) | ○ (`max_tokens`) | キャプション長の安全弁。**thinking 利用時は思考トークンもここから消費**するため、medium/high では 2048 以上を推奨 |
 | seed | 空 | ○ | ○ | 再現用 |
+| thinking_level | 空 | ○ (`ThinkingConfig`) | ○ (`reasoning.effort`) | 下記テーブル参照 |
+| media_resolution | 空 | ○ | ×（送信しない） | vision トークンコスト調整 |
 
-presence_penalty / frequency_penalty / top_k / thinking_config は本バージョンでは未対応です。
+presence_penalty / frequency_penalty / top_k は未対応です。
+
+### thinking / Reasoning（統一コントロール）
+
+| UI 値 | Gemini | OpenRouter `reasoning.effort` |
+|-------|--------|-------------------------------|
+| （空） | 送信しない（API 既定） | 送信しない |
+| `none` | **`minimal` にマップ**（3.x は完全オフ不可。2.5 でも統一のため budget=0 は使わない） | `"none"` |
+| `minimal` | `thinking_level=MINIMAL` | `"minimal"` |
+| `low` | `LOW` | `"low"` |
+| `medium` | `MEDIUM` | `"medium"` |
+| `high` | `HIGH` | `"high"` |
+
+- バッチでは **`include_thoughts` は付けません**（キャプション本文のみ保存）。
+- 思考トークンは課金され、かつ `max_output_tokens` を消費します。切れやすいときはトークン上限を上げてください。
+- OpenRouter で reasoning 非対応モデルの場合は通常無視されます。
+
+### media_resolution（Gemini のみ）
+
+`low` / `medium` / `high`（または `MEDIA_RESOLUTION_*`）。空欄＝API 既定。大量バッチでコストを抑えたいときは低めを検討。OpenRouter には送りません（UI でも無効化）。
 
 ### キャプション向け推奨
 
-- **Gemini 3.x**: temperature / top_p は空欄のまま。`max_output_tokens=1024`
-- **旧モデル**: UI の「推奨（旧モデル向け）」で temperature=0.2 / top_p=0.95 を入れられる（参考値）
+- **大量 / flash-lite バッチ**: thinking は空欄または `minimal`/`low`。`max_output_tokens=1024` で十分なことが多い。media_resolution は `low`〜`medium` でコスト削減可。
+- **品質重視（難しいカット）**: thinking `medium`/`high` + `max_output_tokens` を **2048 以上**。media_resolution は空欄または `high`。
+- **Gemini 3.x**: temperature / top_p は空欄のまま。thinking の `none` は minimal 相当。
+- **旧モデル**: UI の「推奨（旧モデル向け）」で temperature=0.2 / top_p=0.95（参考値）
 - **画像**: prep ON + webp q95 + max_side 768（帯域と品質のバランス）
+
+### 二パス自己レビューについて（未実装・意図的に見送り）
+
+キャプション生成後にもう一度モデルへ「見直し・書き換え」させる **二パス自己レビュー** は検討しましたが、**本バージョンでは入れません**。
+
+- コストがおおよそ **×2**
+- 自己書き換えによるバイアス・冗長化
+- キャプション本文へのメタ文言混入（pollution）リスク
+
+将来必要なら、バッチ本体とは別の **任意コマンド** として検討する想定です（現状の API/UI にはありません）。
 
 ## UI 設定の保存
 
 WebUI の「設定を保存」「設定を読込」はプロジェクト直下の `ui-settings.json` に永続化します（API キーは含めません。キーは `.env`）。
 
 ```json
-{ "schema": 1, "updated_at": "…", "settings": { … } }
+{ "schema": 2, "updated_at": "…", "settings": { … } }
 ```
 
-`ui-settings.json` は `.gitignore` 済みです。スキーマが未知／新しい場合も既知キーだけマージし、欠けたキーは `/api/defaults` の値で補います。
+`ui-settings.json` は `.gitignore` 済みです。スキーマが未知／新しい場合も既知キーだけマージし、欠けたキーは `/api/defaults` の値で補います（schema 2 で `thinking_level` / `media_resolution` を追加）。
 
 ## CLI
 
@@ -88,7 +121,7 @@ caption-batch selfcheck
 caption-batch serve
 ```
 
-`--temperature` / `--top-p` / `--seed` は省略すると API 既定（送信しない）。`--no-temperature` で明示的に省略も可。
+`--temperature` / `--top-p` / `--seed` は省略すると API 既定（送信しない）。`--no-temperature` で明示的に省略も可。 `--thinking-level`（none|minimal|low|medium|high）、`--media-resolution`（Gemini のみ: low|medium|high）も同様に省略可。
 
 ## 自己診断
 
