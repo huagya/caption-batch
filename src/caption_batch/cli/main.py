@@ -22,6 +22,7 @@ from caption_batch.core.prompts import DEFAULT_PROMPT
 from caption_batch.core.providers import get_provider
 from caption_batch.core.providers.base import CaptionRequest
 from caption_batch.core.runner import RunState, _atomic_write_text, run_batch
+from caption_batch.core.thinking import normalize_media_resolution, normalize_thinking_level
 from caption_batch.logging_utils import configure_logging, get_logger, setup_file_logging
 from caption_batch.run_server import find_project_root, load_dotenv_files
 
@@ -77,6 +78,16 @@ def run_cmd(
     image_prep: bool = typer.Option(DEFAULT_IMAGE_PREP_ENABLED, "--image-prep/--no-image-prep"),
     image_format: str = typer.Option(DEFAULT_IMAGE_FORMAT, "--image-format", help="jpeg|webp|png"),
     image_quality: int = typer.Option(DEFAULT_IMAGE_QUALITY, "--image-quality"),
+    thinking_level: Optional[str] = typer.Option(
+        None,
+        "--thinking-level",
+        help="none|minimal|low|medium|high (empty=API default). Gemini: none≈minimal on 3.x",
+    ),
+    media_resolution: Optional[str] = typer.Option(
+        None,
+        "--media-resolution",
+        help="Gemini only: low|medium|high (or MEDIA_RESOLUTION_*). OpenRouter ignores.",
+    ),
 ) -> None:
     """Caption images in a folder."""
     if provider not in ("gemini", "openrouter"):
@@ -85,6 +96,14 @@ def run_cmd(
     if image_format not in ("jpeg", "webp", "png"):
         typer.secho("image-format must be jpeg|webp|png", fg=typer.colors.RED, err=True)
         raise typer.Exit(1)
+    try:
+        thinking_level = normalize_thinking_level(thinking_level)
+        media_resolution = normalize_media_resolution(media_resolution)
+    except ValueError as exc:
+        typer.secho(str(exc), fg=typer.colors.RED, err=True)
+        raise typer.Exit(1) from exc
+    if provider != "gemini":
+        media_resolution = None
     temp, tokens = _temp_tokens(
         temperature, no_temperature, max_output_tokens, no_max_output_tokens
     )
@@ -109,6 +128,8 @@ def run_cmd(
         image_prep_enabled=image_prep,
         image_format=image_format,
         image_quality=image_quality,
+        thinking_level=thinking_level,
+        media_resolution=media_resolution,
         from_index=from_index,
     )
     typer.echo(
@@ -136,6 +157,8 @@ def retry_failed_cmd(
     image_prep: bool = typer.Option(DEFAULT_IMAGE_PREP_ENABLED, "--image-prep/--no-image-prep"),
     image_format: str = typer.Option(DEFAULT_IMAGE_FORMAT, "--image-format"),
     image_quality: int = typer.Option(DEFAULT_IMAGE_QUALITY, "--image-quality"),
+    thinking_level: Optional[str] = typer.Option(None, "--thinking-level"),
+    media_resolution: Optional[str] = typer.Option(None, "--media-resolution"),
 ) -> None:
     """Retry images listed in errors.jsonl."""
     if provider not in ("gemini", "openrouter"):
@@ -143,6 +166,14 @@ def retry_failed_cmd(
     if image_format not in ("jpeg", "webp", "png"):
         typer.secho("image-format must be jpeg|webp|png", fg=typer.colors.RED, err=True)
         raise typer.Exit(1)
+    try:
+        thinking_level = normalize_thinking_level(thinking_level)
+        media_resolution = normalize_media_resolution(media_resolution)
+    except ValueError as exc:
+        typer.secho(str(exc), fg=typer.colors.RED, err=True)
+        raise typer.Exit(1) from exc
+    if provider != "gemini":
+        media_resolution = None
     temp, tokens = _temp_tokens(
         temperature, no_temperature, max_output_tokens, no_max_output_tokens
     )
@@ -184,6 +215,8 @@ def retry_failed_cmd(
                     image_prep_enabled=image_prep,
                     image_format=image_format,  # type: ignore[arg-type]
                     image_quality=image_quality,
+                    thinking_level=thinking_level,
+                    media_resolution=media_resolution,
                 )
             )
             _atomic_write_text(caption_path_for(image), text)
