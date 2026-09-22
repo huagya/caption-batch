@@ -36,7 +36,15 @@
     </section>
 
     <section class="card">
-      <h2>設定</h2>
+      <div class="row between">
+        <h2>設定</h2>
+        <div class="row">
+          <button type="button" id="btn-save-settings" class="ghost">設定を保存</button>
+          <button type="button" id="btn-load-settings" class="ghost">設定を読込</button>
+        </div>
+      </div>
+      <p class="help">設定はプロジェクト直下の <code>ui-settings.json</code> に保存します（APIキーは含みません）。</p>
+
       <label class="label" for="provider">プロバイダ</label>
       <select id="provider">
         <option value="gemini" selected>gemini</option>
@@ -62,17 +70,63 @@
           <label class="label" for="limit">limit（空で無制限）</label>
           <input id="limit" type="number" min="1" placeholder="例: 10" />
         </div>
+      </div>
+
+      <h3 class="subhead">画像準備（Image prep）</h3>
+      <div class="help-block" id="help-image-prep">
+        <strong>契約:</strong> 拡大はしません。OFF＝元バイトをそのまま送信（再エンコードなし）。
+        ON＝最長辺が上限を超えるときだけ縮小し、常に指定フォーマット／品質へ再エンコードします。
+      </div>
+      <div class="checks">
+        <label><input type="checkbox" id="image-prep" checked /> 画像準備を有効（image_prep_enabled）</label>
+      </div>
+      <div class="grid-2">
         <div>
-          <label class="label" for="temperature">temperature</label>
-          <input id="temperature" type="number" value="0.2" step="0.1" />
+          <label class="label" for="max-side">max_image_side（最長辺上限）</label>
+          <input id="max-side" type="number" value="768" min="64" />
+          <p class="help" data-help-key="max_image_side">超える場合のみ縮小。既定 768。</p>
+        </div>
+        <div>
+          <label class="label" for="image-format">image_format</label>
+          <select id="image-format">
+            <option value="webp" selected>webp</option>
+            <option value="jpeg">jpeg</option>
+            <option value="png">png</option>
+          </select>
+          <p class="help" data-help-key="image_format">再エンコード先（prep ON 時）。</p>
+        </div>
+        <div>
+          <label class="label" for="image-quality">image_quality（1–100）</label>
+          <input id="image-quality" type="number" value="95" min="1" max="100" />
+          <p class="help" data-help-key="image_quality">webp の 100=可逆。png の 100=圧縮ほぼなし。</p>
+        </div>
+      </div>
+
+      <h3 class="subhead">LLM 設定</h3>
+      <p class="note" id="note-gemini3">Gemini 3.x では temperature / top_p は空欄推奨（公式）</p>
+      <div class="row actions" style="margin-top:0.25rem">
+        <button type="button" id="btn-llm-recommend" class="ghost" title="古いモデル向けの参考値を入れます。Gemini 3.x では空欄のままが推奨です。">推奨（旧モデル向け）</button>
+      </div>
+      <div class="grid-2">
+        <div>
+          <label class="label" for="temperature">temperature（空＝API既定）</label>
+          <input id="temperature" type="number" step="0.05" min="0" max="2" placeholder="空欄推奨" />
+          <p class="help" data-help-key="temperature">空欄なら送信しません。</p>
+        </div>
+        <div>
+          <label class="label" for="top-p">top_p（空＝API既定）</label>
+          <input id="top-p" type="number" step="0.05" min="0" max="1" placeholder="空欄推奨" />
+          <p class="help" data-help-key="top_p">空欄なら送信しません。</p>
         </div>
         <div>
           <label class="label" for="max-tokens">max_output_tokens</label>
-          <input id="max-tokens" type="number" value="1024" min="1" />
+          <input id="max-tokens" type="number" value="1024" min="1" placeholder="空で省略" />
+          <p class="help" data-help-key="max_output_tokens">キャプション長の上限。空欄で省略可。</p>
         </div>
         <div>
-          <label class="label" for="max-side">max_image_side</label>
-          <input id="max-side" type="number" value="1536" min="64" />
+          <label class="label" for="seed">seed（空＝送信しない）</label>
+          <input id="seed" type="number" step="1" placeholder="空欄" />
+          <p class="help" data-help-key="seed">再現用。Gemini / OpenRouter 対応。</p>
         </div>
       </div>
 
