@@ -126,6 +126,8 @@ def run_batch(
     image_prep_enabled: bool = DEFAULT_IMAGE_PREP_ENABLED,
     image_format: str = DEFAULT_IMAGE_FORMAT,
     image_quality: int = DEFAULT_IMAGE_QUALITY,
+    thinking_level: str | None = None,
+    media_resolution: str | None = None,
     from_index: bool = False,
     progress_cb: Optional[Callable[[RunStats], None]] = None,
     stop_event: Optional[threading.Event] = None,
@@ -166,7 +168,8 @@ def run_batch(
             f"[dry-run] total={stats.total} skip={stats.done_skip} todo={stats.todo} "
             f"workers={workers} temp={temperature} top_p={top_p} max_tokens={max_output_tokens} "
             f"seed={seed} max_side={max_image_side} prep={image_prep_enabled} "
-            f"fmt={image_format} q={image_quality}"
+            f"fmt={image_format} q={image_quality} "
+            f"thinking={thinking_level} media_res={media_resolution}"
         )
         for p in todo[:20]:
             print(f"  would process: {p}")
@@ -199,6 +202,8 @@ def run_batch(
                     image_prep_enabled=image_prep_enabled,
                     image_format=image_format,  # type: ignore[arg-type]
                     image_quality=image_quality,
+                    thinking_level=thinking_level,
+                    media_resolution=media_resolution,
                 )
             )
             _atomic_write_text(out, text)
@@ -253,6 +258,8 @@ def run_batch(
         "image_prep_enabled": image_prep_enabled,
         "image_format": image_format,
         "image_quality": image_quality,
+        "thinking_level": thinking_level,
+        "media_resolution": media_resolution,
         "elapsed_sec": round(elapsed, 2),
         "errors_log": str(state.errors_path),
         "stopped": stopped,
