@@ -7,7 +7,30 @@ from google import genai
 from google.genai import types
 
 from ..image_prep import prepare_image
+from ..thinking import build_gemini_media_resolution, build_gemini_thinking_config
 from .base import CaptionRequest, Provider
+
+
+def _caption_text_from_response(response: object) -> str:
+    """Prefer non-thought parts; fall back to response.text (OK when thoughts not included)."""
+    try:
+        candidates = getattr(response, "candidates", None) or []
+        if candidates:
+            content = getattr(candidates[0], "content", None)
+            parts = getattr(content, "parts", None) or []
+            texts: list[str] = []
+            for part in parts:
+                if getattr(part, "thought", None):
+                    continue
+                t = getattr(part, "text", None)
+                if t:
+                    texts.append(t)
+            if texts:
+                return " ".join(" ".join(texts).split())
+    except Exception:
+        pass
+    text = (getattr(response, "text", None) or "").strip()
+    return " ".join(text.split()) if text else ""
 
 
 class GeminiProvider(Provider):
@@ -37,6 +60,15 @@ class GeminiProvider(Provider):
             config_kwargs["max_output_tokens"] = int(req.max_output_tokens)
         if req.seed is not None:
             config_kwargs["seed"] = int(req.seed)
+
+        thinking_cfg = build_gemini_thinking_config(req.thinking_level)
+        if thinking_cfg is not None:
+            config_kwargs["thinking_config"] = thinking_cfg
+
+        media_res = build_gemini_media_resolution(req.media_resolution)
+        if media_res is not None:
+            config_kwargs["media_resolution"] = media_res
+
         config = types.GenerateContentConfig(**config_kwargs) if config_kwargs else None
 
         delay = 1.0
@@ -58,10 +90,10 @@ class GeminiProvider(Provider):
                 if config is not None:
                     kwargs["config"] = config
                 response = self.client.models.generate_content(**kwargs)
-                text = (response.text or "").strip()
+                text = _caption_text_from_response(response)
                 if not text:
                     raise RuntimeError("Empty response from Gemini")
-                return " ".join(text.split())
+                return text
             except Exception as e:
                 last_err = e
                 msg = str(e).lower()

@@ -7,6 +7,7 @@ import time
 from openai import OpenAI
 
 from ..image_prep import prepare_image
+from ..thinking import build_openrouter_reasoning
 from .base import CaptionRequest, Provider
 
 
@@ -69,8 +70,14 @@ class OpenRouterProvider(Provider):
                     kwargs["max_tokens"] = int(req.max_output_tokens)
                 if req.seed is not None:
                     kwargs["seed"] = int(req.seed)
+                reasoning = build_openrouter_reasoning(req.thinking_level)
+                if reasoning is not None:
+                    kwargs["reasoning"] = reasoning
+                # media_resolution is Gemini-only — never send on OpenRouter
                 response = self.client.chat.completions.create(**kwargs)
-                text = (response.choices[0].message.content or "").strip()
+                # Caption text only — ignore .reasoning even if present
+                message = response.choices[0].message
+                text = (getattr(message, "content", None) or "").strip()
                 if not text:
                     raise RuntimeError("Empty response from OpenRouter")
                 return " ".join(text.split())
