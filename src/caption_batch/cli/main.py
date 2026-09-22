@@ -21,6 +21,7 @@ from caption_batch.core.list_models import format_table, list_gemini, list_openr
 from caption_batch.core.prompts import DEFAULT_PROMPT
 from caption_batch.core.providers import get_provider
 from caption_batch.core.providers.base import CaptionRequest
+from caption_batch.core.few_shot import normalize_few_shot
 from caption_batch.core.runner import RunState, _atomic_write_text, run_batch
 from caption_batch.core.thinking import normalize_media_resolution, normalize_thinking_level
 from caption_batch.logging_utils import configure_logging, get_logger, setup_file_logging
@@ -88,6 +89,21 @@ def run_cmd(
         "--media-resolution",
         help="Gemini only: low|medium|high (or MEDIA_RESOLUTION_*). OpenRouter ignores.",
     ),
+    rate_limit_rpm: Optional[int] = typer.Option(
+        None,
+        "--rate-limit-rpm",
+        help="Global max API calls per minute (0/omit = off).",
+    ),
+    few_shot: Optional[Path] = typer.Option(
+        None,
+        "--few-shot",
+        help="JSON file: [{image, caption}, ...] max 3 examples.",
+    ),
+    preview_count: Optional[int] = typer.Option(
+        None,
+        "--preview-count",
+        help="If set, only caption this many images (1–5). Alias for --limit with clamp.",
+    ),
 ) -> None:
     """Caption images in a folder."""
     if provider not in ("gemini", "openrouter"):
@@ -107,6 +123,20 @@ def run_cmd(
     temp, tokens = _temp_tokens(
         temperature, no_temperature, max_output_tokens, no_max_output_tokens
     )
+    few_shot_examples = None
+    if few_shot is not None:
+        import json as _json
+        raw = _json.loads(Path(few_shot).read_text(encoding="utf-8"))
+        few_shot_examples = normalize_few_shot(raw)
+        if not few_shot_examples:
+            typer.secho("few-shot file produced no valid examples", fg=typer.colors.RED, err=True)
+            raise typer.Exit(1)
+    if preview_count is not None:
+        pc = max(1, min(5, int(preview_count)))
+        if limit is None or limit > pc:
+            limit = pc
+    if rate_limit_rpm is not None and int(rate_limit_rpm) <= 0:
+        rate_limit_rpm = None
     log.info("cli.run provider=%s model=%s dir=%s", provider, model, input_dir)
     stats = run_batch(
         provider_name=provider,
@@ -131,6 +161,8 @@ def run_cmd(
         thinking_level=thinking_level,
         media_resolution=media_resolution,
         from_index=from_index,
+        rate_limit_rpm=rate_limit_rpm,
+        few_shot=few_shot_examples,
     )
     typer.echo(
         f"done total={stats.total} ok={stats.ok} fail={stats.failed} skip={stats.done_skip}",
