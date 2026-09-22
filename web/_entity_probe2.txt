@@ -1,5 +1,0 @@
-A: &amp;quot;
-B: &amp;amp;
-C: &amp;lt;
-D: &amp;gt;
-E: &amp;amp;quot;
