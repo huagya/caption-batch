@@ -62,6 +62,9 @@ class DualFileHandler(logging.Handler):
     Keeps both files in sync for the whole process. Flushes on every emit so a
     diagnostics zip mid-session sees the same lines. latest.log is truncated
     only when fresh_latest=True (server/session start); collect must pass False.
+
+    uvicorn's logging.config.dictConfig calls logging.shutdown which closes all
+    handlers; is_open/_reopen/emit recover from that so file logging survives.
     """
 
     def __init__(
@@ -75,16 +78,49 @@ class DualFileHandler(logging.Handler):
         super().__init__()
         self.session_path = Path(session_path)
         self.latest_path = Path(latest_path)
+        self._encoding = encoding
         self._lock_io = threading.Lock()
         self._session: TextIO = open(self.session_path, "a", encoding=encoding)
         latest_mode = "w" if fresh_latest else "a"
         self._latest: TextIO = open(self.latest_path, latest_mode, encoding=encoding)
+
+    def is_open(self) -> bool:
+        """True if both streams are usable (not closed by logging.shutdown)."""
+        try:
+            return (
+                not self._session.closed
+                and not self._latest.closed
+                and self._session.writable()
+                and self._latest.writable()
+            )
+        except Exception:
+            return False
+
+    def _reopen(self) -> None:
+        """Re-open both files in append mode (repair after dictConfig shutdown).
+
+        Caller must hold _lock_io. Does not truncate latest.log.
+        """
+        try:
+            if not self._session.closed:
+                self._session.close()
+        except Exception:
+            pass
+        try:
+            if not self._latest.closed:
+                self._latest.close()
+        except Exception:
+            pass
+        self._session = open(self.session_path, "a", encoding=self._encoding)
+        self._latest = open(self.latest_path, "a", encoding=self._encoding)
 
     def emit(self, record: logging.LogRecord) -> None:
         try:
             msg = self.format(record)
             line = msg + "\n"
             with self._lock_io:
+                if not self.is_open():
+                    self._reopen()
                 self._session.write(line)
                 self._latest.write(line)
                 self._session.flush()
@@ -95,10 +131,9 @@ class DualFileHandler(logging.Handler):
     def flush(self) -> None:
         with self._lock_io:
             try:
+                if not self.is_open():
+                    self._reopen()
                 self._session.flush()
-            except Exception:
-                pass
-            try:
                 self._latest.flush()
             except Exception:
                 pass
@@ -179,46 +214,101 @@ def prune_old_session_logs(logs_dir: Path | str | None = None, *, keep_last: int
     return deleted
 
 
+def _find_dual_handler(root: logging.Logger) -> Optional[DualFileHandler]:
+    for h in root.handlers:
+        if isinstance(h, DualFileHandler):
+            return h
+    return None
+
+
+def _handler_needs_repair(handler: Optional[DualFileHandler]) -> bool:
+    if handler is None:
+        return True
+    return not handler.is_open()
+
+
 def setup_file_logging(
     logs_dir: Path | str | None = None,
     *,
     level: int = logging.INFO,
     fresh_latest: bool = True,
+    force: bool = False,
 ) -> Path:
     """Create logs/, attach DualFileHandler (session + latest) for this process.
 
-    Safe to call multiple times; subsequent calls are no-ops and return the
-    existing session path.
+    Safe to call multiple times. If already set up but the DualFileHandler is
+    missing or closed (e.g. after uvicorn dictConfig → logging.shutdown),
+    removes the dead handler and recreates (repair path). Pass force=True to
+    always recreate.
 
-    fresh_latest=True (default): truncate logs/latest.log at session start.
+    fresh_latest=True (default): truncate logs/latest.log at *new* session start.
+    On repair, latest is always opened in append mode so prior lines are kept.
     fresh_latest=False: append to latest.log (use from collect so a running
     server's latest.log is not wiped).
     """
     global _file_logging_setup, _session_log_path, _logs_dir, _dual_handler
     configure_logging(level=level)
-    if _file_logging_setup and _session_log_path is not None:
+    root = logging.getLogger(PACKAGE_LOGGER)
+
+    existing = _dual_handler if _dual_handler is not None else _find_dual_handler(root)
+    if (
+        _file_logging_setup
+        and _session_log_path is not None
+        and not force
+        and not _handler_needs_repair(existing)
+    ):
         return _session_log_path
 
+    # Repair path: dead/closed/missing handler after dictConfig shutdown
+    repairing = (
+        _file_logging_setup
+        and _session_log_path is not None
+        and not force
+        and _handler_needs_repair(existing)
+    )
+
     if logs_dir is None:
-        here = Path(__file__).resolve()
-        root = None
-        for candidate in (here.parent, *here.parents):
-            if (candidate / "pyproject.toml").is_file():
-                root = candidate
-                break
-        logs_path = (root or here.parents[2]) / LOGS_DIR_NAME
+        if _logs_dir is not None:
+            logs_path = _logs_dir
+        else:
+            here = Path(__file__).resolve()
+            project_root = None
+            for candidate in (here.parent, *here.parents):
+                if (candidate / "pyproject.toml").is_file():
+                    project_root = candidate
+                    break
+            logs_path = (project_root or here.parents[2]) / LOGS_DIR_NAME
     else:
         logs_path = Path(logs_dir)
 
     logs_path.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    session_path = logs_path / f"session-{stamp}.log"
+
+    # Remove dead DualFileHandler(s) from the logger
+    for h in list(root.handlers):
+        if isinstance(h, DualFileHandler):
+            try:
+                root.removeHandler(h)
+            except Exception:
+                pass
+            try:
+                h.close()
+            except Exception:
+                pass
+    _dual_handler = None
+
+    if repairing and _session_log_path is not None:
+        session_path = _session_log_path
+        # Repair: never truncate latest
+        use_fresh = False
+    else:
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        session_path = logs_path / f"session-{stamp}.log"
+        use_fresh = fresh_latest
+
     latest_path = logs_path / "latest.log"
 
     fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
-    root = logging.getLogger(PACKAGE_LOGGER)
-
-    dual = DualFileHandler(session_path, latest_path, fresh_latest=fresh_latest)
+    dual = DualFileHandler(session_path, latest_path, fresh_latest=use_fresh)
     dual.setLevel(level)
     dual.setFormatter(fmt)
     root.addHandler(dual)
@@ -227,7 +317,18 @@ def setup_file_logging(
     _file_logging_setup = True
     _session_log_path = session_path
     _logs_dir = logs_path
-    root.info("file logging started session=%s latest=%s", session_path.name, latest_path.name)
+    if repairing:
+        root.info(
+            "file logging repaired session=%s latest=%s",
+            session_path.name,
+            latest_path.name,
+        )
+    else:
+        root.info(
+            "file logging started session=%s latest=%s",
+            session_path.name,
+            latest_path.name,
+        )
     prune_old_session_logs(logs_path, keep_last=SESSION_KEEP_LAST)
     return session_path
 
