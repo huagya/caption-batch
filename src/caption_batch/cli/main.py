@@ -18,7 +18,7 @@ from caption_batch.core.image_prep import (
     DEFAULT_MAX_IMAGE_SIDE,
 )
 from caption_batch.core.list_models import format_table, list_gemini, list_openrouter, to_json
-from caption_batch.core.prompts import DEFAULT_PROMPT
+from caption_batch.core.prompts import DEFAULT_PROMPT, DEFAULT_USER_PROMPT, resolve_user_prompt
 from caption_batch.core.providers import get_provider
 from caption_batch.core.providers.base import CaptionRequest
 from caption_batch.core.few_shot import normalize_few_shot
@@ -62,8 +62,13 @@ def run_cmd(
     input_dir: Path = typer.Option(..., "--input-dir"),
     workers: int = typer.Option(4, "--workers"),
     recursive: bool = typer.Option(True, "--recursive/--no-recursive"),
-    prompt: Optional[str] = typer.Option(None, "--prompt"),
+    prompt: Optional[str] = typer.Option(None, "--prompt", help="System instruction (rules)."),
     prompt_file: Optional[Path] = typer.Option(None, "--prompt-file"),
+    user_prompt: Optional[str] = typer.Option(
+        None,
+        "--user-prompt",
+        help=f'Per-image user cue (default: "{DEFAULT_USER_PROMPT}").',
+    ),
     state_dir: Optional[Path] = typer.Option(None, "--state-dir"),
     overwrite: bool = typer.Option(False, "--overwrite"),
     limit: Optional[int] = typer.Option(None, "--limit"),
@@ -146,6 +151,7 @@ def run_cmd(
         recursive=recursive,
         prompt=prompt,
         prompt_file=prompt_file,
+        user_prompt=user_prompt,
         state_dir=state_dir,
         overwrite=overwrite,
         limit=limit,
@@ -178,6 +184,7 @@ def retry_failed_cmd(
     errors: Path = typer.Option(..., "--errors", help="errors.jsonl path"),
     workers: int = typer.Option(2, "--workers"),
     prompt_file: Optional[Path] = typer.Option(None, "--prompt-file"),
+    user_prompt: Optional[str] = typer.Option(None, "--user-prompt"),
     state_dir: Optional[Path] = typer.Option(None, "--state-dir"),
     temperature: Optional[float] = typer.Option(None, "--temperature"),
     no_temperature: bool = typer.Option(False, "--no-temperature"),
@@ -228,6 +235,7 @@ def retry_failed_cmd(
     prompt_text = (
         prompt_file.read_text(encoding="utf-8").strip() if prompt_file else DEFAULT_PROMPT
     )
+    user_prompt_text = resolve_user_prompt(user_prompt)
     state = RunState(state_dir or (input_dir / ".caption_state"))
     provider_obj = get_provider(provider)
     ok = fail = 0
@@ -238,6 +246,7 @@ def retry_failed_cmd(
                 CaptionRequest(
                     image_path=image,
                     prompt=prompt_text,
+                    user_prompt=user_prompt_text,
                     model=model,
                     temperature=temp,
                     top_p=top_p,
