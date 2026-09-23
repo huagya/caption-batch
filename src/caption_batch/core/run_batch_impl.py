@@ -25,7 +25,7 @@ from .image_prep import (
     DEFAULT_MAX_IMAGE_SIDE,
 )
 from .job_snapshot import write_job_snapshot
-from .prompts import DEFAULT_PROMPT
+from .prompts import DEFAULT_PROMPT, resolve_user_prompt
 from .providers import get_provider
 from .providers.base import CaptionRequest
 from .rate_limit import RateLimiter, make_rate_limiter
@@ -54,6 +54,7 @@ def run_batch(
     recursive: bool = True,
     prompt: str | None = None,
     prompt_file: Path | None = None,
+    user_prompt: str | None = None,
     state_dir: Path | None = None,
     overwrite: bool = False,
     limit: int | None = None,
@@ -92,6 +93,7 @@ def run_batch(
         prompt_text = prompt_file.read_text(encoding="utf-8").strip()
     else:
         prompt_text = (prompt or DEFAULT_PROMPT).strip()
+    user_prompt_text = resolve_user_prompt(user_prompt)
 
     examples = normalize_few_shot(few_shot)
 
@@ -170,6 +172,7 @@ def run_batch(
                         "from_index": from_index,
                         "rate_limit_rpm": rate_limit_rpm,
                         "prompt": prompt_text,
+                        "user_prompt": user_prompt_text,
                         "few_shot": [{"image": str(e.image), "caption": e.caption} for e in examples],
                     }
                 )
@@ -234,6 +237,7 @@ def run_batch(
         workers=workers,
         limiter=limiter,
         prompt_text=prompt_text,
+        user_prompt_text=user_prompt_text,
         model=model,
         temperature=temperature,
         top_p=top_p,
