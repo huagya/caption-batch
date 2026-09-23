@@ -23,12 +23,28 @@ if errorlevel 1 (
   exit /b 1
 )
 
-echo Pulling latest code: git pull
-git pull
+echo Syncing to latest main (local code edits discarded; .env / ui-settings.json kept)...
+git fetch origin
 if errorlevel 1 (
-  echo [ERROR] git pull failed. Check network or login.
+  echo [ERROR] git fetch failed. Check network or login.
   pause
   exit /b 1
+)
+git checkout main
+if errorlevel 1 (
+  echo [ERROR] git checkout main failed.
+  pause
+  exit /b 1
+)
+git reset --hard origin/main
+if errorlevel 1 (
+  echo [ERROR] git reset failed.
+  pause
+  exit /b 1
+)
+git clean -fd
+if errorlevel 1 (
+  echo [WARN] git clean reported an issue; continuing.
 )
 
 echo.
