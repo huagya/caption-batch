@@ -47,6 +47,43 @@ def few_shot_to_dicts(examples: Sequence[FewShotExample]) -> list[dict[str, str]
     return [{"image": str(ex.image), "caption": ex.caption} for ex in examples]
 
 
+def build_openrouter_messages_spec(
+    *,
+    system_prompt: str,
+    user_prompt: str,
+    target_data_url: str,
+    example_items: Sequence[tuple[str, str]] | None = None,
+) -> list[dict[str, Any]]:
+    """
+    OpenRouter chat messages: system + multi-turn few-shot + target.
+
+    User turns always put text (user_prompt) BEFORE image_url parts.
+    example_items: list of (data_url, caption_text)
+    """
+    messages: list[dict[str, Any]] = [{"role": "system", "content": system_prompt}]
+    for url, caption in example_items or []:
+        messages.append(
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": user_prompt},
+                    {"type": "image_url", "image_url": {"url": url}},
+                ],
+            }
+        )
+        messages.append({"role": "assistant", "content": caption})
+    messages.append(
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": user_prompt},
+                {"type": "image_url", "image_url": {"url": target_data_url}},
+            ],
+        }
+    )
+    return messages
+
+
 def build_openrouter_user_content(
     *,
     prompt: str,
@@ -54,11 +91,10 @@ def build_openrouter_user_content(
     example_items: Sequence[tuple[str, str]],
 ) -> list[dict[str, Any]]:
     """
-    Build OpenRouter multimodal user content array.
+    Legacy single-user content builder (text-first). Prefer build_openrouter_messages_spec.
 
-    example_items: list of (data_url, caption_text)
-    Pattern: prompt, then for each example: "Example:", image, caption text,
-    then "Now caption this image:", target image.
+    Kept for callers that only need the user content array with text before images.
+    `prompt` here is the short user cue (not system rules).
     """
     content: list[dict[str, Any]] = [{"type": "text", "text": prompt}]
     for i, (url, caption) in enumerate(example_items, start=1):
@@ -74,26 +110,25 @@ def build_openrouter_user_content(
 
 def build_gemini_user_parts_spec(
     *,
-    prompt: str,
+    user_prompt: str,
     target_mime: str,
-    example_items: Sequence[tuple[str, str]],
+    example_items: Sequence[tuple[str, str]] | None = None,
 ) -> list[dict[str, Any]]:
     """
-    Pure helper describing Gemini user parts (for tests / documentation).
+    Pure helper describing Gemini *user* parts (system is separate).
 
-    example_items: list of (mime_type, caption_text) — image bytes omitted;
-    callers insert bytes when building real Parts.
-    Returns a list of part specs: {"kind": "text"|"image", ...}
+    Gemini single-image quality: image BEFORE text in each turn.
+    example_items: list of (mime_type, caption_text) — image bytes omitted.
+    Returns part specs: {"kind": "text"|"image", ...}
     """
-    parts: list[dict[str, Any]] = [{"kind": "text", "text": prompt}]
-    for i, (mime, caption) in enumerate(example_items, start=1):
-        label = "Example caption:" if len(example_items) == 1 else f"Example {i} caption:"
-        parts.append({"kind": "text", "text": label})
+    parts: list[dict[str, Any]] = []
+    examples = list(example_items or [])
+    for i, (mime, caption) in enumerate(examples, start=1):
+        label = "Example caption:" if len(examples) == 1 else f"Example {i} caption:"
         parts.append({"kind": "image", "mime": mime})
-        parts.append({"kind": "text", "text": caption})
-    if example_items:
-        parts.append({"kind": "text", "text": "Now caption this image:"})
+        parts.append({"kind": "text", "text": f"{label}\n{caption}"})
     parts.append({"kind": "image", "mime": target_mime})
+    parts.append({"kind": "text", "text": user_prompt})
     return parts
 
 
