@@ -7,8 +7,9 @@ import time
 
 from openai import OpenAI
 
-from ..few_shot import build_openrouter_user_content
+from ..few_shot import build_openrouter_messages_spec
 from ..image_prep import prepare_image
+from ..prompts import resolve_user_prompt
 from ..thinking import build_openrouter_reasoning
 from .base import CaptionRequest, Provider
 
@@ -28,24 +29,23 @@ def _data_url_for(req: CaptionRequest, image_path) -> str:
 
 
 def build_openrouter_messages(req: CaptionRequest) -> list[dict]:
-    """Build OpenRouter chat messages (prompt + optional few-shot + target). Testable."""
+    """
+    Build OpenRouter chat messages.
+
+    - system role = long rules (req.prompt)
+    - user turns: text (user_prompt) FIRST, then image_url (OR recommendation)
+    - few-shot as multi-turn user/assistant pairs when present
+    """
+    user_text = resolve_user_prompt(req.user_prompt)
     target_url = _data_url_for(req, req.image_path)
     examples = list(req.few_shot or [])
-    if not examples:
-        content = [
-            {"type": "text", "text": req.prompt},
-            {"type": "image_url", "image_url": {"url": target_url}},
-        ]
-    else:
-        example_items = [
-            (_data_url_for(req, ex.image), ex.caption) for ex in examples
-        ]
-        content = build_openrouter_user_content(
-            prompt=req.prompt,
-            target_data_url=target_url,
-            example_items=example_items,
-        )
-    return [{"role": "user", "content": content}]
+    example_items = [(_data_url_for(req, ex.image), ex.caption) for ex in examples]
+    return build_openrouter_messages_spec(
+        system_prompt=req.prompt,
+        user_prompt=user_text,
+        target_data_url=target_url,
+        example_items=example_items,
+    )
 
 
 class OpenRouterProvider(Provider):
