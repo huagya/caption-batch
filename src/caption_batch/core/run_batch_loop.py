@@ -22,6 +22,7 @@ def run_caption_loop(
     workers: int,
     limiter: Any,
     prompt_text: str,
+    user_prompt_text: str,
     model: str,
     temperature: float | None,
     top_p: float | None,
@@ -53,6 +54,7 @@ def run_caption_loop(
                 CaptionRequest(
                     image_path=image,
                     prompt=prompt_text,
+                    user_prompt=user_prompt_text,
                     model=model,
                     temperature=temperature,
                     top_p=top_p,

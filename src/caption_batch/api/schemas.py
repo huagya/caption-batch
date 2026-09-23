@@ -13,7 +13,7 @@ from caption_batch.core.image_prep import (
     DEFAULT_MAX_IMAGE_SIDE,
 )
 
-UI_SETTINGS_SCHEMA = 3
+UI_SETTINGS_SCHEMA = 4
 UI_SETTINGS_KEYS = (
     "provider",
     "model",
@@ -35,6 +35,7 @@ UI_SETTINGS_KEYS = (
     "thinking_level",
     "media_resolution",
     "prompt",
+    "user_prompt",
     "rate_limit_rpm",
     "few_shot",
     "preview_count",
@@ -78,6 +79,7 @@ class StartJobBody(BaseModel):
     thinking_level: Optional[str] = None
     media_resolution: Optional[str] = None
     prompt: Optional[str] = None
+    user_prompt: Optional[str] = None
     from_index: bool = False
     rate_limit_rpm: Optional[int] = 0
     few_shot: Optional[list[FewShotItem]] = None
