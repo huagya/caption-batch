@@ -1,5 +1,3 @@
-"""Settings / defaults / keys / models API routes."""
-
 from __future__ import annotations
 
 import os
@@ -25,60 +23,12 @@ from caption_batch.core.image_prep import (
     DEFAULT_MAX_IMAGE_SIDE,
 )
 from caption_batch.core.list_models import format_table, list_gemini, list_openrouter, to_json
-from caption_batch.core.prompts import DEFAULT_PROMPT
+from caption_batch.core.prompts import DEFAULT_PROMPT, DEFAULT_USER_PROMPT
 from caption_batch.logging_utils import get_logger
 from caption_batch.run_server import find_project_root
+from caption_batch.api.routes_settings_helpers import _upsert_env_file, _ui_settings_path, _ENV_KEY_RE
 
 log = get_logger(__name__)
-_ENV_KEY_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
-
-
-def _upsert_env_file(path: Path, updates: dict[str, str]) -> None:
-    existing: dict[str, str] = {}
-    order: list[str] = []
-    other_lines: list[str] = []
-    if path.is_file():
-        for line in path.read_text(encoding="utf-8").splitlines():
-            stripped = line.strip()
-            if not stripped or stripped.startswith("#") or "=" not in line:
-                other_lines.append(line)
-                continue
-            k, _, v = line.partition("=")
-            k = k.strip()
-            if k in updates:
-                existing[k] = updates[k]
-                order.append(k)
-            else:
-                existing[k] = v
-                order.append(k)
-    for k, v in updates.items():
-        if k not in existing:
-            order.append(k)
-            existing[k] = v
-    out: list[str] = []
-    seen_keys: set[str] = set()
-    if path.is_file():
-        for line in path.read_text(encoding="utf-8").splitlines():
-            stripped = line.strip()
-            if not stripped or stripped.startswith("#") or "=" not in line:
-                out.append(line)
-                continue
-            k = line.partition("=")[0].strip()
-            if k in updates:
-                out.append(f"{k}={updates[k]}")
-                seen_keys.add(k)
-            else:
-                out.append(line)
-                seen_keys.add(k)
-    for k, v in updates.items():
-        if k not in seen_keys:
-            out.append(f"{k}={v}")
-    path.write_text("\n".join(out).rstrip() + "\n", encoding="utf-8")
-
-
-def _ui_settings_path() -> Path:
-    return find_project_root() / "ui-settings.json"
-
 
 def register_settings_routes(app: FastAPI) -> None:
     @app.get("/api/health")
@@ -89,6 +39,7 @@ def register_settings_routes(app: FastAPI) -> None:
     def defaults() -> dict:
         return {
             "prompt": DEFAULT_PROMPT,
+            "user_prompt": DEFAULT_USER_PROMPT,
             "temperature": None,
             "top_p": None,
             "max_output_tokens": 1024,
@@ -121,6 +72,8 @@ def register_settings_routes(app: FastAPI) -> None:
                 "preview": "本番の前に数枚だけ試します。結果はプレビュー欄に表示され、既定では .txt も書きます（ディスクと画面を一致）。",
                 "snapshot_resume": "「前回の設定を読込」でフォルダ内の最終ジョブ設定を復元。上書きOFFのまま Start すると、既にある .txt はスキップして続きから進めます。",
                 "few_shot": "お手本の画像＋キャプションを最大3組。モデルに「こんな書き方で」と示します。空欄なら従来どおり。",
+                "prompt": "システム指示（役割・ルール・出力形式）。長いルールはここに。プロバイダの system 枠へ送られます。",
+                "user_prompt": "ユーザー指示（画像ごとの短い指示）。空欄なら既定「Caption this image.」。Gemini は画像の後、OpenRouter は画像の前に置きます。",
             },
             "notes": {
                 "gemini_3x": "Gemini 3.x では temperature / top_p は空欄推奨（公式）。thinking の none は minimal 相当（完全オフ不可）。",
@@ -136,7 +89,7 @@ def register_settings_routes(app: FastAPI) -> None:
             "temperature", "top_p", "max_output_tokens", "seed",
             "max_image_side", "image_prep_enabled", "image_format", "image_quality",
             "thinking_level", "media_resolution",
-            "workers", "prompt", "rate_limit_rpm", "preview_count", "few_shot",
+            "workers", "prompt", "user_prompt", "rate_limit_rpm", "preview_count", "few_shot",
         )}
         base_settings.update({
             "provider": "gemini",
