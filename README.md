@@ -102,11 +102,18 @@ presence_penalty / frequency_penalty / top_k は未対応です。
 WebUI の「設定を保存」「設定を読込」はプロジェクト直下の `ui-settings.json` に永続化します（API キーは含めません。キーは `.env`）。
 
 ```json
-{ "schema": 3, "updated_at": "…", "settings": { … } }
+{ "schema": 4, "updated_at": "…", "settings": { … } }
 ```
 
-`ui-settings.json` は `.gitignore` 済みです。スキーマが未知／新しい場合も既知キーだけマージし、欠けたキーは `/api/defaults` の値で補います（schema 3 で `thinking_level` / `media_resolution` を追加）。
+`ui-settings.json` は `.gitignore` 済みです。スキーマが未知／新しい場合も既知キーだけマージし、欠けたキーは `/api/defaults` の値で補います（schema 3 で `thinking_level` / `media_resolution`、schema 4 で `user_prompt` を追加）。
 
+
+## 0.6.1 — プロンプト分割と画像/テキスト順序
+
+- **システム指示**（従来の長い `prompt` / DEFAULT_PROMPT）と **ユーザー指示**（短い `user_prompt`、既定 `Caption this image.`）を分離。
+- **Gemini**: `system_instruction` にルール。ユーザー contents は **画像 → テキスト**（お手本も同様）。長いルールはユーザー parts に入れない。
+- **OpenRouter**: `role=system` にルール。ユーザーは **テキスト → 画像**。few-shot は multi-turn（user/assistant）を優先。
+- WebUI: 「システム指示」「ユーザー指示」の2欄。CLI: `--user-prompt`。
 
 ## 0.6.0 の新機能
 
