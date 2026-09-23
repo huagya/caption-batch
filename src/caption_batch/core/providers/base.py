@@ -17,8 +17,9 @@ from ..few_shot import FewShotExample
 @dataclass
 class CaptionRequest:
     image_path: Path
-    prompt: str
+    prompt: str  # system instruction (rules / role / output format)
     model: str
+    user_prompt: str | None = None  # per-image cue; empty/None → DEFAULT_USER_PROMPT
     temperature: float | None = None
     top_p: float | None = None
     max_output_tokens: int | None = 1024

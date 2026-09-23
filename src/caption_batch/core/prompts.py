@@ -19,3 +19,14 @@ Combine the following 4 elements into a single, cohesive description:
 
 [Output Format]
 Return ONLY the raw caption text."""
+
+# Short per-image user cue (paired with DEFAULT_PROMPT as system instruction).
+DEFAULT_USER_PROMPT = "Caption this image."
+
+
+def resolve_user_prompt(user_prompt: str | None) -> str:
+    """Return stripped user cue, or DEFAULT_USER_PROMPT when empty/None."""
+    if user_prompt is None:
+        return DEFAULT_USER_PROMPT
+    text = str(user_prompt).strip()
+    return text if text else DEFAULT_USER_PROMPT
