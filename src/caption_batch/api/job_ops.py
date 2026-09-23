@@ -110,6 +110,7 @@ def run_job(
             workers=workers,
             recursive=body.recursive,
             prompt=body.prompt,
+            user_prompt=body.user_prompt,
             overwrite=body.overwrite,
             limit=limit,
             dry_run=body.dry_run,
