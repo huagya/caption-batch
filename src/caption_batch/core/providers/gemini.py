@@ -8,6 +8,7 @@ from google import genai
 from google.genai import types
 
 from ..image_prep import prepare_image
+from ..prompts import resolve_user_prompt
 from ..thinking import build_gemini_media_resolution, build_gemini_thinking_config
 from .base import CaptionRequest, Provider
 
@@ -47,19 +48,23 @@ def _prep(req: CaptionRequest, image_path):
 
 
 def build_gemini_contents(req: CaptionRequest) -> list:
-    """Build Gemini Content list (prompt + optional few-shot + target). Testable helper."""
-    parts: list = [types.Part.from_text(text=req.prompt)]
+    """
+    Build Gemini user Content list (few-shot + target).
+
+    System rules live in GenerateContentConfig.system_instruction — not here.
+    Ordering (Google single-image guidance): image bytes, then text.
+    """
+    user_text = resolve_user_prompt(req.user_prompt)
+    parts: list = []
     examples = list(req.few_shot or [])
     for i, ex in enumerate(examples, start=1):
         label = "Example caption:" if len(examples) == 1 else f"Example {i} caption:"
         ex_data, ex_mime = _prep(req, ex.image)
-        parts.append(types.Part.from_text(text=label))
         parts.append(types.Part.from_bytes(data=ex_data, mime_type=ex_mime))
-        parts.append(types.Part.from_text(text=ex.caption))
-    if examples:
-        parts.append(types.Part.from_text(text="Now caption this image:"))
+        parts.append(types.Part.from_text(text=f"{label}\n{ex.caption}"))
     data, mime = _prep(req, req.image_path)
     parts.append(types.Part.from_bytes(data=data, mime_type=mime))
+    parts.append(types.Part.from_text(text=user_text))
     return [types.Content(role="user", parts=parts)]
 
 
@@ -74,7 +79,9 @@ class GeminiProvider(Provider):
         self.max_retries = max_retries
 
     def caption(self, req: CaptionRequest) -> str:
-        config_kwargs: dict = {}
+        config_kwargs: dict = {
+            "system_instruction": req.prompt,
+        }
         if req.temperature is not None:
             config_kwargs["temperature"] = float(req.temperature)
         if req.top_p is not None:
@@ -92,7 +99,7 @@ class GeminiProvider(Provider):
         if media_res is not None:
             config_kwargs["media_resolution"] = media_res
 
-        config = types.GenerateContentConfig(**config_kwargs) if config_kwargs else None
+        config = types.GenerateContentConfig(**config_kwargs)
         contents = build_gemini_contents(req)
 
         delay = 1.0
@@ -102,9 +109,8 @@ class GeminiProvider(Provider):
                 kwargs: dict = {
                     "model": req.model,
                     "contents": contents,
+                    "config": config,
                 }
-                if config is not None:
-                    kwargs["config"] = config
                 response = self.client.models.generate_content(**kwargs)
                 text = _caption_text_from_response(response)
                 if not text:
