@@ -191,8 +191,13 @@
         <label><input type="checkbox" id="from-index" /> from-index（image_index.txt を使う）</label>
       </div>
 
-      <label class="label" for="prompt">プロンプト</label>
+      <label class="label" for="prompt">システム指示（役割・ルール・出力形式）</label>
       <textarea id="prompt" rows="8" placeholder="読み込み中…"></textarea>
+      <p class="help" data-help-key="prompt">長いルールはここに。プロバイダの system 枠へ送られます。</p>
+
+      <label class="label" for="user-prompt">ユーザー指示（画像ごとの短い指示）</label>
+      <input id="user-prompt" type="text" placeholder="Caption this image." autocomplete="off" />
+      <p class="help" data-help-key="user_prompt">空欄なら既定の短いキュー。Gemini は画像の後、OpenRouter は画像の前に置きます。</p>
 
       <p class="help" data-help-key="snapshot_resume">続きから: 「前回の設定を読込」→ overwrite をOFFのまま Start。既存の .txt はスキップされます。</p>
       <div class="row actions">
